@@ -526,12 +526,13 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     float [] sunDirection = getSunDirection(compass, Camera.convertTimeToTimeZone(camera.getTime(), compass.getTimeZone()));
     // Update Sun direction during daytime
     if (sunDirection [1] > -0.075f) {
+      float turbidity = getHome().getEnvironment().getTurbidity();
       if (this.useSunSky) {
         this.sunflow.parameter("up", new Vector3(0, 1, 0));
         this.sunflow.parameter("east",
             new Vector3((float)Math.sin(compass.getNorthDirection()), 0, (float)Math.cos(compass.getNorthDirection())));
         this.sunflow.parameter("sundir", new Vector3(sunDirection [0], sunDirection [1], sunDirection [2]));
-        this.sunflow.parameter("turbidity", 6f);
+        this.sunflow.parameter("turbidity", turbidity);
         this.sunflow.parameter("samples", this.useSunskyLight ? 12 : 0);
         this.sunSkyLightName = UUID.randomUUID().toString();
         this.sunflow.light(this.sunSkyLightName, "sunsky");
@@ -545,6 +546,7 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
           new float [] {(float)Math.sin(compass.getNorthDirection()), 0, (float)Math.cos(compass.getNorthDirection())});
       parameterList.addVectors("sundir", InterpolationType.NONE,
           new float [] {sunDirection [0], sunDirection [1], sunDirection [2]});
+      parameterList.addFloat("turbidity", turbidity);
       sunSkyLight.update(parameterList, this.sunflow);
       float [] sunColor = sunSkyLight.getSunColor().getRGB();
 
