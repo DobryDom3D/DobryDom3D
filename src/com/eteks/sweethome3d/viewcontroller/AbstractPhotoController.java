@@ -38,7 +38,7 @@ public abstract class AbstractPhotoController implements Controller {
   /**
    * The properties that may be edited by the view associated to this controller. 
    */
-  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY}
+  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT}
   
   private final Home                  home;
   private final View                  view3D;
@@ -52,6 +52,7 @@ public abstract class AbstractPhotoController implements Controller {
   private float                       view3DAspectRatio;
   private int                         ceilingLightColor;
   private float                       turbidity;
+  private boolean                     skyTransparent;
 
   public AbstractPhotoController(Home home,
                                  UserPreferences preferences,
@@ -70,6 +71,7 @@ public abstract class AbstractPhotoController implements Controller {
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_QUALITY, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.TURBIDITY, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, listener);
     updateProperties();
   }
 
@@ -94,6 +96,7 @@ public abstract class AbstractPhotoController implements Controller {
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_QUALITY, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.TURBIDITY, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, this);
       } else if (HomeEnvironment.Property.PHOTO_WIDTH.name().equals(ev.getPropertyName())) {
         controller.setWidth((Integer)ev.getNewValue(), false);
       } else if (HomeEnvironment.Property.PHOTO_HEIGHT.name().equals(ev.getPropertyName())) {
@@ -106,6 +109,8 @@ public abstract class AbstractPhotoController implements Controller {
         controller.setCeilingLightColor((Integer)ev.getNewValue());
       } else if (HomeEnvironment.Property.TURBIDITY.name().equals(ev.getPropertyName())) {
         controller.setTurbidity((Float)ev.getNewValue());
+      } else if (HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT.name().equals(ev.getPropertyName())) {
+        controller.setSkyTransparent((Boolean)ev.getNewValue());
       }
     }
   }
@@ -142,6 +147,7 @@ public abstract class AbstractPhotoController implements Controller {
     setQuality(homeEnvironment.getPhotoQuality());
     setCeilingLightColor(homeEnvironment.getCeillingLightColor());
     setTurbidity(homeEnvironment.getTurbidity());
+    setSkyTransparent(homeEnvironment.isPhotoSkyTransparent());
   }
   
   /**
@@ -297,6 +303,24 @@ public abstract class AbstractPhotoController implements Controller {
    */
   public float getTurbidity() {
     return this.turbidity;
+  }
+
+  /**
+   * Sets whether the sky should be transparent in the edited photo.
+   */
+  public void setSkyTransparent(boolean skyTransparent) {
+    if (this.skyTransparent != skyTransparent) {
+      this.skyTransparent = skyTransparent;
+      this.propertyChangeSupport.firePropertyChange(Property.SKY_TRANSPARENT.name(), !skyTransparent, skyTransparent);
+      this.home.getEnvironment().setPhotoSkyTransparent(skyTransparent);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky should be transparent in the edited photo.
+   */
+  public boolean isSkyTransparent() {
+    return this.skyTransparent;
   }
 
   /**

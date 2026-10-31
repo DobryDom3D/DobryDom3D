@@ -20,6 +20,7 @@
 package com.eteks.sweethome3d.swing;
 
 import java.awt.AlphaComposite;
+import java.awt.Color;
 import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -27,6 +28,7 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 
@@ -45,6 +47,7 @@ public class ScaledImageComponent extends JComponent {
   private BufferedImage image;
   private boolean       imageEnlargementEnabled;
   private float         scaleMultiplier = 1f;
+  private boolean       transparencyCheckerboardEnabled;
   
   /**
    * Creates a component that will display no image.
@@ -140,6 +143,10 @@ public class ScaledImageComponent extends JComponent {
       Point translation = getImageTranslation();      
       g2D.translate(translation.x, translation.y);
       float scale = getImageScale();
+      if (this.transparencyCheckerboardEnabled
+          && this.image.getColorModel().hasAlpha()) {
+        paintTransparencyCheckerboard(g2D, Math.round(this.image.getWidth() * scale), Math.round(this.image.getHeight() * scale));
+      }
       g2D.scale(scale, scale);    
       
       if (composite != null) {
@@ -152,6 +159,30 @@ public class ScaledImageComponent extends JComponent {
     }
   }
   
+  /**
+   * Paints a checkerboard of the given size at the origin of <code>g2D</code>.
+   */
+  private void paintTransparencyCheckerboard(Graphics2D g2D, int width, int height) {
+    Shape oldClip = g2D.getClip();
+    g2D.clipRect(0, 0, width, height);
+    int cellSize = Math.round(8 * SwingTools.getResolutionScale());
+    for (int y = 0; y < height; y += cellSize) {
+      for (int x = 0; x < width; x += cellSize) {
+        g2D.setColor(((x / cellSize + y / cellSize) & 1) == 0 ? Color.WHITE : Color.LIGHT_GRAY);
+        g2D.fillRect(x, y, cellSize, cellSize);
+      }
+    }
+    g2D.setClip(oldClip);
+  }
+
+  /**
+   * Sets whether a checkerboard should be drawn behind the transparent pixels of the image.
+   */
+  public void setTransparencyCheckerboardEnabled(boolean transparencyCheckerboardEnabled) {
+    this.transparencyCheckerboardEnabled = transparencyCheckerboardEnabled;
+    repaint();
+  }
+
   /**
    * Sets the image drawn by this component.
    */

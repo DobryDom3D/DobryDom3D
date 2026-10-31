@@ -685,6 +685,11 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
       params.put("AO_samples", 4);
       params.put("do_AO", true);
     }
+    if (getHome().getEnvironment().isPhotoSkyTransparent()
+        && image.getColorModel().hasAlpha()) {
+      // Hide the sky from the camera but keep it lighting the scene
+      params.put("bg_transp", true);
+    }
     createIntegrator("integrator", params);
 
     float yaw = camera.getYaw();

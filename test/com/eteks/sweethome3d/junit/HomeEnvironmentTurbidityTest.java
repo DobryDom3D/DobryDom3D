@@ -60,9 +60,25 @@ public class HomeEnvironmentTurbidityTest extends TestCase {
     assertEquals(4f, (Float)events.get(0).getNewValue(), 0);
   }
 
+  public void testSkyTransparent() {
+    HomeEnvironment environment = new HomeEnvironment();
+    assertFalse(environment.isPhotoSkyTransparent());
+    final List<PropertyChangeEvent> events = new ArrayList<PropertyChangeEvent>();
+    environment.addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, new PropertyChangeListener() {
+        public void propertyChange(PropertyChangeEvent ev) {
+          events.add(ev);
+        }
+      });
+    environment.setPhotoSkyTransparent(true);
+    environment.setPhotoSkyTransparent(true);
+    assertTrue(environment.isPhotoSkyTransparent());
+    assertEquals(1, events.size());
+  }
+
   public void testSerialization() throws Exception {
     HomeEnvironment environment = new HomeEnvironment();
     environment.setTurbidity(2.5f);
+    environment.setPhotoSkyTransparent(true);
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     ObjectOutputStream out = new ObjectOutputStream(bytes);
     out.writeObject(environment);
@@ -70,5 +86,6 @@ public class HomeEnvironmentTurbidityTest extends TestCase {
     HomeEnvironment read = (HomeEnvironment)new ObjectInputStream(
         new ByteArrayInputStream(bytes.toByteArray())).readObject();
     assertEquals(2.5f, read.getTurbidity(), 0);
+    assertTrue(read.isPhotoSkyTransparent());
   }
 }
