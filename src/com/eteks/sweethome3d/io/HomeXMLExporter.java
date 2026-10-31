@@ -199,6 +199,7 @@ public class HomeXMLExporter extends ObjectXMLExporter<Home> {
           writer.writeAttribute("photoAspectRatio", environment.getPhotoAspectRatio().name());
           writer.writeIntegerAttribute("photoQuality", environment.getPhotoQuality());
           writer.writeBooleanAttribute("photoSkyTransparent", environment.isPhotoSkyTransparent(), false);
+          writer.writeBooleanAttribute("photoSkyThroughGlassTransparent", environment.isPhotoSkyThroughGlassTransparent(), false);
           writer.writeIntegerAttribute("videoWidth", environment.getVideoWidth());
           writer.writeAttribute("videoAspectRatio", environment.getVideoAspectRatio().name());
           writer.writeIntegerAttribute("videoQuality", environment.getVideoQuality());

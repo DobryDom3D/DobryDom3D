@@ -648,6 +648,8 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     // Hide the sky from the camera but keep it lighting the scene, if the image can store transparency
     this.sunflow.parameter("transparentSky",
         getHome().getEnvironment().isPhotoSkyTransparent() && image.getColorModel().hasAlpha());
+    this.sunflow.parameter("transparentSkyThroughGlass",
+        getHome().getEnvironment().isPhotoSkyThroughGlassTransparent());
 
     // Render image with default camera
     this.sunflow.parameter("camera", CAMERA_NAME);

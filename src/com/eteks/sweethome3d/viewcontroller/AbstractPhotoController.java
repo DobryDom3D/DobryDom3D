@@ -38,7 +38,7 @@ public abstract class AbstractPhotoController implements Controller {
   /**
    * The properties that may be edited by the view associated to this controller. 
    */
-  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT}
+  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT, SKY_THROUGH_GLASS_TRANSPARENT}
   
   private final Home                  home;
   private final View                  view3D;
@@ -53,6 +53,7 @@ public abstract class AbstractPhotoController implements Controller {
   private int                         ceilingLightColor;
   private float                       turbidity;
   private boolean                     skyTransparent;
+  private boolean                     skyThroughGlassTransparent;
 
   public AbstractPhotoController(Home home,
                                  UserPreferences preferences,
@@ -72,6 +73,7 @@ public abstract class AbstractPhotoController implements Controller {
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.TURBIDITY, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, listener);
     updateProperties();
   }
 
@@ -97,6 +99,7 @@ public abstract class AbstractPhotoController implements Controller {
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.TURBIDITY, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, this);
       } else if (HomeEnvironment.Property.PHOTO_WIDTH.name().equals(ev.getPropertyName())) {
         controller.setWidth((Integer)ev.getNewValue(), false);
       } else if (HomeEnvironment.Property.PHOTO_HEIGHT.name().equals(ev.getPropertyName())) {
@@ -111,6 +114,8 @@ public abstract class AbstractPhotoController implements Controller {
         controller.setTurbidity((Float)ev.getNewValue());
       } else if (HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT.name().equals(ev.getPropertyName())) {
         controller.setSkyTransparent((Boolean)ev.getNewValue());
+      } else if (HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT.name().equals(ev.getPropertyName())) {
+        controller.setSkyThroughGlassTransparent((Boolean)ev.getNewValue());
       }
     }
   }
@@ -148,6 +153,7 @@ public abstract class AbstractPhotoController implements Controller {
     setCeilingLightColor(homeEnvironment.getCeillingLightColor());
     setTurbidity(homeEnvironment.getTurbidity());
     setSkyTransparent(homeEnvironment.isPhotoSkyTransparent());
+    setSkyThroughGlassTransparent(homeEnvironment.isPhotoSkyThroughGlassTransparent());
   }
   
   /**
@@ -321,6 +327,25 @@ public abstract class AbstractPhotoController implements Controller {
    */
   public boolean isSkyTransparent() {
     return this.skyTransparent;
+  }
+
+  /**
+   * Sets whether the sky seen through glass should be transparent too in the edited photo.
+   */
+  public void setSkyThroughGlassTransparent(boolean skyThroughGlassTransparent) {
+    if (this.skyThroughGlassTransparent != skyThroughGlassTransparent) {
+      this.skyThroughGlassTransparent = skyThroughGlassTransparent;
+      this.propertyChangeSupport.firePropertyChange(Property.SKY_THROUGH_GLASS_TRANSPARENT.name(),
+          !skyThroughGlassTransparent, skyThroughGlassTransparent);
+      this.home.getEnvironment().setPhotoSkyThroughGlassTransparent(skyThroughGlassTransparent);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky seen through glass should be transparent too in the edited photo.
+   */
+  public boolean isSkyThroughGlassTransparent() {
+    return this.skyThroughGlassTransparent;
   }
 
   /**
