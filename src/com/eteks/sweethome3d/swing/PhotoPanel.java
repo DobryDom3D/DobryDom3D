@@ -143,6 +143,7 @@ public class PhotoPanel extends JPanel implements DialogView {
   private JLabel                   turbidityLabel;
   private JSpinner                 turbiditySpinner;
   private JCheckBox                skyTransparentCheckBox;
+  private JCheckBox                skyThroughGlassTransparentCheckBox;
   private String                   dialogTitle;
   private JPanel                   photoPanel;
   private CardLayout               photoCardLayout;
@@ -516,8 +517,23 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.skyTransparentCheckBox.addItemListener(new ItemListener() {
         public void itemStateChanged(ItemEvent ev) {
           controller.setSkyTransparent(skyTransparentCheckBox.isSelected());
+          updateSkyTransparentEnabled();
         }
       });
+    this.skyThroughGlassTransparentCheckBox = new JCheckBox();
+    this.skyThroughGlassTransparentCheckBox.setSelected(controller.isSkyThroughGlassTransparent());
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.SKY_THROUGH_GLASS_TRANSPARENT,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            skyThroughGlassTransparentCheckBox.setSelected(controller.isSkyThroughGlassTransparent());
+          }
+        });
+    this.skyThroughGlassTransparentCheckBox.addItemListener(new ItemListener() {
+        public void itemStateChanged(ItemEvent ev) {
+          controller.setSkyThroughGlassTransparent(skyThroughGlassTransparentCheckBox.isSelected());
+        }
+      });
+    updateSkyTransparentEnabled();
 
     final JComponent view3D = (JComponent)controller.get3DView();
     controller.set3DViewAspectRatio((float)view3D.getWidth() / view3D.getHeight());
@@ -549,6 +565,8 @@ public class PhotoPanel extends JPanel implements DialogView {
         PhotoPanel.class, "turbidityLabel.text"));
     this.skyTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "skyTransparentCheckBox.text"));
+    this.skyThroughGlassTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "skyThroughGlassTransparentCheckBox.text"));
     this.dialogTitle = preferences.getLocalizedString(PhotoPanel.class, "createPhoto.title");
     Window window = SwingUtilities.getWindowAncestor(this);
     if (window != null) {
@@ -581,6 +599,8 @@ public class PhotoPanel extends JPanel implements DialogView {
       this.turbidityLabel.setLabelFor(this.turbiditySpinner);
       this.skyTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "skyTransparentCheckBox.mnemonic")).getKeyCode());
+      this.skyThroughGlassTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "skyThroughGlassTransparentCheckBox.mnemonic")).getKeyCode());
     }
   }
 
@@ -679,16 +699,20 @@ public class PhotoPanel extends JPanel implements DialogView {
     advancedPanel.add(this.rendererComboBox, new GridBagConstraints(
         1, 3, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
-    // Last row
+    // Seventh row
     advancedPanel.add(this.turbidityLabel, new GridBagConstraints(
         0, 4, 1, 1, 0, 0, GridBagConstraints.CENTER,
-        GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, standardGap), 0, 0));
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
     this.turbidityLabel.setHorizontalAlignment(labelAlignment);
     advancedPanel.add(this.turbiditySpinner, new GridBagConstraints(
         1, 4, 1, 1, 0, 0, GridBagConstraints.LINE_START,
-        GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 10), 0, 0));
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
     advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
         2, 4, 3, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
+    // Last row
+    advancedPanel.add(this.skyThroughGlassTransparentCheckBox, new GridBagConstraints(
+        1, 5, 4, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
@@ -708,7 +732,8 @@ public class PhotoPanel extends JPanel implements DialogView {
             + this.dateSpinner.getPreferredSize().height + 5
             + this.lensComboBox.getPreferredSize().height + 5
             + this.rendererComboBox.getPreferredSize().height + 5
-            + this.turbiditySpinner.getPreferredSize().height;
+            + this.turbiditySpinner.getPreferredSize().height + 5
+            + this.skyThroughGlassTransparentCheckBox.getPreferredSize().height;
         root.setSize(root.getWidth(),
             root.getHeight() + (advancedComponentsVisible ? -componentsHeight : componentsHeight));
       }
@@ -730,6 +755,17 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.turbidityLabel.setVisible(visible);
     this.turbiditySpinner.setVisible(visible);
     this.skyTransparentCheckBox.setVisible(visible);
+    this.skyThroughGlassTransparentCheckBox.setVisible(visible);
+  }
+
+  /**
+   * Enables the transparent sky check boxes unless a photo is being created,
+   * the one for the sky seen through glass being enabled only if the sky is transparent.
+   */
+  private void updateSkyTransparentEnabled() {
+    boolean enabled = this.photoCreationExecutor == null;
+    this.skyTransparentCheckBox.setEnabled(enabled);
+    this.skyThroughGlassTransparentCheckBox.setEnabled(enabled && this.skyTransparentCheckBox.isSelected());
   }
 
   /**
@@ -874,6 +910,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.rendererComboBox.setEnabled(false);
     this.turbiditySpinner.setEnabled(false);
     this.skyTransparentCheckBox.setEnabled(false);
+    this.skyThroughGlassTransparentCheckBox.setEnabled(false);
     getActionMap().get(ActionType.SAVE_PHOTO).setEnabled(false);
     getRootPane().setDefaultButton(this.createButton);
     this.createButton.setAction(getActionMap().get(ActionType.STOP_PHOTO_CREATION));
@@ -980,7 +1017,7 @@ public class PhotoPanel extends JPanel implements DialogView {
             photoCardLayout.show(photoPanel, PHOTO_CARD);
             PhotoPanel.this.photoCreationExecutor = null;
             updateTurbidityEnabled();
-            skyTransparentCheckBox.setEnabled(true);
+            updateSkyTransparentEnabled();
           }
         });
     }

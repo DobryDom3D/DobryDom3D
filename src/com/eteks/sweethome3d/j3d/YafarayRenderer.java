@@ -687,9 +687,11 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
     }
     if (getHome().getEnvironment().isPhotoSkyTransparent()
         && image.getColorModel().hasAlpha()) {
-      // Hide the sky from the camera, even when seen through glass, but keep it lighting the scene
+      // Hide the sky from the camera but keep it lighting the scene
       params.put("bg_transp", true);
-      params.put("bg_transp_refract", true);
+      // Hiding also the sky seen through glass makes the edges of thin glass panes partly transparent
+      // (YafaRay can't tell a ray that reflected inside the glass from one that saw the sky)
+      params.put("bg_transp_refract", getHome().getEnvironment().isPhotoSkyThroughGlassTransparent());
     }
     createIntegrator("integrator", params);
 

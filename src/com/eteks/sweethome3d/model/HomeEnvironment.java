@@ -46,7 +46,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
    * The environment properties that may change.
    */
   public enum Property {OBSERVER_CAMERA_ELEVATION_ADJUSTED, GROUND_COLOR, GROUND_TEXTURE, BACKGROUND_IMAGE_VISIBLE_ON_GROUND_3D,
-                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, PHOTO_SKY_TRANSPARENT,
+                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, PHOTO_SKY_TRANSPARENT, PHOTO_SKY_THROUGH_GLASS_TRANSPARENT,
                         WALLS_ALPHA, DRAWING_MODE, SUBPART_SIZE_UNDER_LIGHT, ALL_LEVELS_VISIBLE,
                         PHOTO_WIDTH, PHOTO_HEIGHT, PHOTO_ASPECT_RATIO, PHOTO_QUALITY,
                         VIDEO_WIDTH, VIDEO_ASPECT_RATIO, VIDEO_QUALITY, VIDEO_SPEED, VIDEO_FRAME_RATE, VIDEO_CAMERA_PATH};
@@ -67,6 +67,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private int                             ceilingLightColor;
   private float                           turbidity;
   private boolean                         photoSkyTransparent;
+  private boolean                         photoSkyThroughGlassTransparent;
   private float                           wallsAlpha;
   private DrawingMode                     drawingMode;
   private float                           subpartSizeUnderLight;
@@ -374,6 +375,26 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
     if (photoSkyTransparent != this.photoSkyTransparent) {
       this.photoSkyTransparent = photoSkyTransparent;
       firePropertyChange(Property.PHOTO_SKY_TRANSPARENT.name(), !photoSkyTransparent, photoSkyTransparent);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky seen through glass should also be transparent in photos
+   * with a transparent sky.
+   */
+  public boolean isPhotoSkyThroughGlassTransparent() {
+    return this.photoSkyThroughGlassTransparent;
+  }
+
+  /**
+   * Sets whether the sky seen through glass should also be transparent in photos with a transparent sky,
+   * and fires a <code>PropertyChangeEvent</code>.
+   */
+  public void setPhotoSkyThroughGlassTransparent(boolean photoSkyThroughGlassTransparent) {
+    if (photoSkyThroughGlassTransparent != this.photoSkyThroughGlassTransparent) {
+      this.photoSkyThroughGlassTransparent = photoSkyThroughGlassTransparent;
+      firePropertyChange(Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT.name(),
+          !photoSkyThroughGlassTransparent, photoSkyThroughGlassTransparent);
     }
   }
 
