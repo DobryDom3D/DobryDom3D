@@ -46,7 +46,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
    * The environment properties that may change.
    */
   public enum Property {OBSERVER_CAMERA_ELEVATION_ADJUSTED, GROUND_COLOR, GROUND_TEXTURE, BACKGROUND_IMAGE_VISIBLE_ON_GROUND_3D,
-                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY,
+                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, PHOTO_SKY_TRANSPARENT,
                         WALLS_ALPHA, DRAWING_MODE, SUBPART_SIZE_UNDER_LIGHT, ALL_LEVELS_VISIBLE,
                         PHOTO_WIDTH, PHOTO_HEIGHT, PHOTO_ASPECT_RATIO, PHOTO_QUALITY,
                         VIDEO_WIDTH, VIDEO_ASPECT_RATIO, VIDEO_QUALITY, VIDEO_SPEED, VIDEO_FRAME_RATE, VIDEO_CAMERA_PATH};
@@ -66,6 +66,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private int                             lightColor;
   private int                             ceilingLightColor;
   private float                           turbidity;
+  private boolean                         photoSkyTransparent;
   private float                           wallsAlpha;
   private DrawingMode                     drawingMode;
   private float                           subpartSizeUnderLight;
@@ -356,6 +357,23 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
       int oldCeilingLightColor = this.ceilingLightColor;
       this.ceilingLightColor = ceilingLightColor;
       firePropertyChange(Property.CEILING_LIGHT_COLOR.name(), oldCeilingLightColor, ceilingLightColor);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky should be transparent in photos.
+   */
+  public boolean isPhotoSkyTransparent() {
+    return this.photoSkyTransparent;
+  }
+
+  /**
+   * Sets whether the sky should be transparent in photos, and fires a <code>PropertyChangeEvent</code>.
+   */
+  public void setPhotoSkyTransparent(boolean photoSkyTransparent) {
+    if (photoSkyTransparent != this.photoSkyTransparent) {
+      this.photoSkyTransparent = photoSkyTransparent;
+      firePropertyChange(Property.PHOTO_SKY_TRANSPARENT.name(), !photoSkyTransparent, photoSkyTransparent);
     }
   }
 

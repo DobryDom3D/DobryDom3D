@@ -142,6 +142,7 @@ public class PhotoPanel extends JPanel implements DialogView {
   private JComboBox                rendererComboBox;
   private JLabel                   turbidityLabel;
   private JSpinner                 turbiditySpinner;
+  private JCheckBox                skyTransparentCheckBox;
   private String                   dialogTitle;
   private JPanel                   photoPanel;
   private CardLayout               photoCardLayout;
@@ -220,6 +221,7 @@ public class PhotoPanel extends JPanel implements DialogView {
                                 final UserPreferences preferences,
                                 final PhotoController controller) {
     this.photoComponent = new ScaledImageComponent();
+    this.photoComponent.setTransparencyCheckerboardEnabled(true);
     this.photoComponent.setPreferredSize(new Dimension(getToolkit().getScreenSize().width <= 1024 ? 320 : 400, 320));
     // Under Mac OS X, set a transfer handler and a mouse listener on photo component
     // to let the user drag and drop the created image (Windows support seems to fail)
@@ -503,6 +505,20 @@ public class PhotoPanel extends JPanel implements DialogView {
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.SKY_TEXTURE, turbidityEnabledListener);
     updateTurbidityEnabled();
 
+    this.skyTransparentCheckBox = new JCheckBox();
+    this.skyTransparentCheckBox.setSelected(controller.isSkyTransparent());
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.SKY_TRANSPARENT,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            skyTransparentCheckBox.setSelected(controller.isSkyTransparent());
+          }
+        });
+    this.skyTransparentCheckBox.addItemListener(new ItemListener() {
+        public void itemStateChanged(ItemEvent ev) {
+          controller.setSkyTransparent(skyTransparentCheckBox.isSelected());
+        }
+      });
+
     final JComponent view3D = (JComponent)controller.get3DView();
     controller.set3DViewAspectRatio((float)view3D.getWidth() / view3D.getHeight());
 
@@ -531,6 +547,8 @@ public class PhotoPanel extends JPanel implements DialogView {
         PhotoPanel.class, "rendererLabel.text"));
     this.turbidityLabel.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "turbidityLabel.text"));
+    this.skyTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "skyTransparentCheckBox.text"));
     this.dialogTitle = preferences.getLocalizedString(PhotoPanel.class, "createPhoto.title");
     Window window = SwingUtilities.getWindowAncestor(this);
     if (window != null) {
@@ -561,6 +579,8 @@ public class PhotoPanel extends JPanel implements DialogView {
       this.turbidityLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "turbidityLabel.mnemonic")).getKeyCode());
       this.turbidityLabel.setLabelFor(this.turbiditySpinner);
+      this.skyTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "skyTransparentCheckBox.mnemonic")).getKeyCode());
     }
   }
 
@@ -667,6 +687,9 @@ public class PhotoPanel extends JPanel implements DialogView {
     advancedPanel.add(this.turbiditySpinner, new GridBagConstraints(
         1, 4, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 10), 0, 0));
+    advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
+        2, 4, 3, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
         1, 3, 1, 1, 0, 0, GridBagConstraints.CENTER,
@@ -706,6 +729,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.rendererComboBox.setVisible(visible);
     this.turbidityLabel.setVisible(visible);
     this.turbiditySpinner.setVisible(visible);
+    this.skyTransparentCheckBox.setVisible(visible);
   }
 
   /**
@@ -849,6 +873,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.ceilingLightEnabledCheckBox.setEnabled(false);
     this.rendererComboBox.setEnabled(false);
     this.turbiditySpinner.setEnabled(false);
+    this.skyTransparentCheckBox.setEnabled(false);
     getActionMap().get(ActionType.SAVE_PHOTO).setEnabled(false);
     getRootPane().setDefaultButton(this.createButton);
     this.createButton.setAction(getActionMap().get(ActionType.STOP_PHOTO_CREATION));
@@ -899,7 +924,8 @@ public class PhotoPanel extends JPanel implements DialogView {
           bestImageHeight = imageHeight;
         }
         if (!photoCreationExecutor.isShutdown()) {
-          image = new BufferedImage(imageWidth, bestImageHeight, BufferedImage.TYPE_INT_RGB);
+          image = new BufferedImage(imageWidth, bestImageHeight,
+              this.controller.isSkyTransparent() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
           this.photoComponent.setImage(image);
           EventQueue.invokeLater(new Runnable() {
             public void run() {
@@ -954,6 +980,7 @@ public class PhotoPanel extends JPanel implements DialogView {
             photoCardLayout.show(photoPanel, PHOTO_CARD);
             PhotoPanel.this.photoCreationExecutor = null;
             updateTurbidityEnabled();
+            skyTransparentCheckBox.setEnabled(true);
           }
         });
     }

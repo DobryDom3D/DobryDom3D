@@ -645,6 +645,9 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     this.sunflow.parameter("aa.max", antiAliasingMax);
     String samplerAlgorithm = getRenderingParameterValue("samplerAlgorithm");
     this.sunflow.parameter("sampler", samplerAlgorithm); // ipr, fast or bucket
+    // Hide the sky from the camera but keep it lighting the scene, if the image can store transparency
+    this.sunflow.parameter("transparentSky",
+        getHome().getEnvironment().isPhotoSkyTransparent() && image.getColorModel().hasAlpha());
 
     // Render image with default camera
     this.sunflow.parameter("camera", CAMERA_NAME);
