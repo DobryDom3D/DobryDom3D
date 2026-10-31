@@ -36,10 +36,17 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private static final long serialVersionUID = 1L;
 
   /**
+   * The minimum, maximum and default values of the turbidity of the sky used in photos.
+   */
+  public static final float MIN_TURBIDITY = 2f;
+  public static final float MAX_TURBIDITY = 10f;
+  public static final float DEFAULT_TURBIDITY = 6f;
+
+  /**
    * The environment properties that may change.
    */
   public enum Property {OBSERVER_CAMERA_ELEVATION_ADJUSTED, GROUND_COLOR, GROUND_TEXTURE, BACKGROUND_IMAGE_VISIBLE_ON_GROUND_3D,
-                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR,
+                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY,
                         WALLS_ALPHA, DRAWING_MODE, SUBPART_SIZE_UNDER_LIGHT, ALL_LEVELS_VISIBLE,
                         PHOTO_WIDTH, PHOTO_HEIGHT, PHOTO_ASPECT_RATIO, PHOTO_QUALITY,
                         VIDEO_WIDTH, VIDEO_ASPECT_RATIO, VIDEO_QUALITY, VIDEO_SPEED, VIDEO_FRAME_RATE, VIDEO_CAMERA_PATH};
@@ -58,6 +65,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private HomeTexture                     skyTexture;
   private int                             lightColor;
   private int                             ceilingLightColor;
+  private float                           turbidity;
   private float                           wallsAlpha;
   private DrawingMode                     drawingMode;
   private float                           subpartSizeUnderLight;
@@ -137,6 +145,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
     this.skyTexture = skyTexture;
     this.lightColor = lightColor;
     this.ceilingLightColor = 0xD0D0D0;
+    this.turbidity = DEFAULT_TURBIDITY;
     this.wallsAlpha = wallsAlpha;
     this.drawingMode = DrawingMode.FILL;
     this.photoWidth = 400;
@@ -155,6 +164,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
    */
   private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
     this.ceilingLightColor = 0xD0D0D0;
+    this.turbidity = DEFAULT_TURBIDITY;
     this.photoWidth = 400;
     this.photoHeight = 300;
     this.photoAspectRatio = AspectRatio.VIEW_3D_RATIO;
@@ -346,6 +356,26 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
       int oldCeilingLightColor = this.ceilingLightColor;
       this.ceilingLightColor = ceilingLightColor;
       firePropertyChange(Property.CEILING_LIGHT_COLOR.name(), oldCeilingLightColor, ceilingLightColor);
+    }
+  }
+
+  /**
+   * Returns the turbidity of the sky used in photos.
+   */
+  public float getTurbidity() {
+    return this.turbidity;
+  }
+
+  /**
+   * Sets the turbidity of the sky used in photos, clamped between {@link #MIN_TURBIDITY}
+   * and {@link #MAX_TURBIDITY}, and fires a <code>PropertyChangeEvent</code>.
+   */
+  public void setTurbidity(float turbidity) {
+    turbidity = Math.max(MIN_TURBIDITY, Math.min(MAX_TURBIDITY, turbidity));
+    if (turbidity != this.turbidity) {
+      float oldTurbidity = this.turbidity;
+      this.turbidity = turbidity;
+      firePropertyChange(Property.TURBIDITY.name(), oldTurbidity, turbidity);
     }
   }
 

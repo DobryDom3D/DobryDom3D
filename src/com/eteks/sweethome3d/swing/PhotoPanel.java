@@ -82,6 +82,7 @@ import javax.swing.JSeparator;
 import javax.swing.JSpinner;
 import javax.swing.KeyStroke;
 import javax.swing.SpinnerDateModel;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import javax.swing.event.ChangeEvent;
@@ -93,6 +94,7 @@ import com.eteks.sweethome3d.model.Camera;
 import com.eteks.sweethome3d.model.Camera.Lens;
 import com.eteks.sweethome3d.model.Home;
 import com.eteks.sweethome3d.model.HomeEnvironment;
+import com.eteks.sweethome3d.model.ObserverCamera;
 import com.eteks.sweethome3d.model.Selectable;
 import com.eteks.sweethome3d.model.UserPreferences;
 import com.eteks.sweethome3d.tools.OperatingSystem;
@@ -138,6 +140,8 @@ public class PhotoPanel extends JPanel implements DialogView {
   private JCheckBox                ceilingLightEnabledCheckBox;
   private JLabel                   rendererLabel;
   private JComboBox                rendererComboBox;
+  private JLabel                   turbidityLabel;
+  private JSpinner                 turbiditySpinner;
   private String                   dialogTitle;
   private JPanel                   photoPanel;
   private CardLayout               photoCardLayout;
@@ -475,6 +479,30 @@ public class PhotoPanel extends JPanel implements DialogView {
         }
       });
 
+    this.turbidityLabel = new JLabel();
+    this.turbiditySpinner = new JSpinner(new SpinnerNumberModel(controller.getTurbidity(),
+        HomeEnvironment.MIN_TURBIDITY, HomeEnvironment.MAX_TURBIDITY, 0.5f));
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.TURBIDITY,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            turbiditySpinner.setValue(controller.getTurbidity());
+          }
+        });
+    this.turbiditySpinner.addChangeListener(new ChangeListener() {
+        public void stateChanged(ChangeEvent ev) {
+          controller.setTurbidity(((Number)turbiditySpinner.getValue()).floatValue());
+        }
+      });
+    // Turbidity has no effect when the sky is replaced by a texture lighting an observer camera view
+    PropertyChangeListener turbidityEnabledListener = new PropertyChangeListener() {
+        public void propertyChange(PropertyChangeEvent ev) {
+          updateTurbidityEnabled();
+        }
+      };
+    home.addPropertyChangeListener(Home.Property.CAMERA, turbidityEnabledListener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.SKY_TEXTURE, turbidityEnabledListener);
+    updateTurbidityEnabled();
+
     final JComponent view3D = (JComponent)controller.get3DView();
     controller.set3DViewAspectRatio((float)view3D.getWidth() / view3D.getHeight());
 
@@ -501,6 +529,8 @@ public class PhotoPanel extends JPanel implements DialogView {
         PhotoPanel.class, "ceilingLightEnabledCheckBox.text"));
     this.rendererLabel.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "rendererLabel.text"));
+    this.turbidityLabel.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "turbidityLabel.text"));
     this.dialogTitle = preferences.getLocalizedString(PhotoPanel.class, "createPhoto.title");
     Window window = SwingUtilities.getWindowAncestor(this);
     if (window != null) {
@@ -528,6 +558,9 @@ public class PhotoPanel extends JPanel implements DialogView {
       this.rendererLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "rendererLabel.mnemonic")).getKeyCode());
       this.rendererLabel.setLabelFor(this.rendererComboBox);
+      this.turbidityLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "turbidityLabel.mnemonic")).getKeyCode());
+      this.turbidityLabel.setLabelFor(this.turbiditySpinner);
     }
   }
 
@@ -618,13 +651,21 @@ public class PhotoPanel extends JPanel implements DialogView {
     advancedPanel.add(this.ceilingLightEnabledCheckBox, new GridBagConstraints(
         2, 2, 3, 1, 0, 0, GridBagConstraints.CENTER,
         GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
-    // Last row
+    // Sixth row
     advancedPanel.add(this.rendererLabel, new GridBagConstraints(
         0, 3, 1, 1, 0, 0, GridBagConstraints.CENTER,
-        GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, standardGap), 0, 0));
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
     this.rendererLabel.setHorizontalAlignment(labelAlignment);
     advancedPanel.add(this.rendererComboBox, new GridBagConstraints(
         1, 3, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
+    // Last row
+    advancedPanel.add(this.turbidityLabel, new GridBagConstraints(
+        0, 4, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, standardGap), 0, 0));
+    this.turbidityLabel.setHorizontalAlignment(labelAlignment);
+    advancedPanel.add(this.turbiditySpinner, new GridBagConstraints(
+        1, 4, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 10), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
@@ -642,7 +683,9 @@ public class PhotoPanel extends JPanel implements DialogView {
         updateRatioComponents();
         int componentsHeight = this.advancedComponentsSeparator.getPreferredSize().height + 6
             + this.dateSpinner.getPreferredSize().height + 5
-            + this.lensComboBox.getPreferredSize().height;
+            + this.lensComboBox.getPreferredSize().height + 5
+            + this.rendererComboBox.getPreferredSize().height + 5
+            + this.turbiditySpinner.getPreferredSize().height;
         root.setSize(root.getWidth(),
             root.getHeight() + (advancedComponentsVisible ? -componentsHeight : componentsHeight));
       }
@@ -661,6 +704,18 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.ceilingLightEnabledCheckBox.setVisible(visible);
     this.rendererLabel.setVisible(visible);
     this.rendererComboBox.setVisible(visible);
+    this.turbidityLabel.setVisible(visible);
+    this.turbiditySpinner.setVisible(visible);
+  }
+
+  /**
+   * Enables the turbidity spinner unless a photo is being created or the sky is not
+   * used to light the scene (observer camera with a sky texture).
+   */
+  private void updateTurbidityEnabled() {
+    this.turbiditySpinner.setEnabled(this.photoCreationExecutor == null
+        && !(this.home.getCamera() instanceof ObserverCamera
+             && this.home.getEnvironment().getSkyTexture() != null));
   }
 
   /**
@@ -793,6 +848,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.lensComboBox.setEnabled(false);
     this.ceilingLightEnabledCheckBox.setEnabled(false);
     this.rendererComboBox.setEnabled(false);
+    this.turbiditySpinner.setEnabled(false);
     getActionMap().get(ActionType.SAVE_PHOTO).setEnabled(false);
     getRootPane().setDefaultButton(this.createButton);
     this.createButton.setAction(getActionMap().get(ActionType.STOP_PHOTO_CREATION));
@@ -897,6 +953,7 @@ public class PhotoPanel extends JPanel implements DialogView {
             ceilingLightEnabledCheckBox.setEnabled(true);
             photoCardLayout.show(photoPanel, PHOTO_CARD);
             PhotoPanel.this.photoCreationExecutor = null;
+            updateTurbidityEnabled();
           }
         });
     }

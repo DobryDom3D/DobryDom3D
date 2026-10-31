@@ -67,6 +67,7 @@
     <include name="**/HomeController3DTest.java"/>
     <include name="**/HomeFileRecorderTest.java"/>
     <include name="**/HomeXMLRoundTripTest.java"/>
+    <include name="**/HomeEnvironmentTurbidityTest.java"/>
     <include name="**/AutoRecoveryManagerTest.java"/>
     <include name="**/IconManagerTest.java"/>
     <include name="**/CatalogTreeTest.java"/>
@@ -89,6 +90,7 @@
   <!-- Fast smoke suite for quick local iteration -->
   <patternset id="fast.test.includes">
     <include name="**/HomeXMLRoundTripTest.java"/>
+    <include name="**/HomeEnvironmentTurbidityTest.java"/>
     <include name="**/AutoRecoveryManagerTest.java"/>
   </patternset>
   <property name="test.includes" value="**/*Test.java"/>

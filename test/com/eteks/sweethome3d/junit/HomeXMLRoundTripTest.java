@@ -182,6 +182,7 @@ public class HomeXMLRoundTripTest extends TestCase {
     assertEquals("Different ground color", environment.getGroundColor(), readEnvironment.getGroundColor());
     assertEquals("Different sky color", environment.getSkyColor(), readEnvironment.getSkyColor());
     assertEquals("Different light color", environment.getLightColor(), readEnvironment.getLightColor());
+    assertEquals("Different turbidity", environment.getTurbidity(), readEnvironment.getTurbidity(), 0);
     assertEquals("Different ceiling light color",
         environment.getCeillingLightColor(), readEnvironment.getCeillingLightColor());
     assertEquals("Different walls alpha", environment.getWallsAlpha(), readEnvironment.getWallsAlpha());
@@ -346,6 +347,7 @@ public class HomeXMLRoundTripTest extends TestCase {
     environment.setSkyColor(0xCCCCFF);
     environment.setLightColor(0xFFFFFF);
     environment.setCeillingLightColor(0xEEEEEE);
+    environment.setTurbidity(7.5f);
     environment.setWallsAlpha(0.25f);
     environment.setSubpartSizeUnderLight(8);
     environment.setAllLevelsVisible(false);

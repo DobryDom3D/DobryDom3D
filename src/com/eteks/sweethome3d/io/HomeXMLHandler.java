@@ -105,6 +105,7 @@ import com.eteks.sweethome3d.tools.URLContent;
  *       skyColor CDATA #IMPLIED
  *       lightColor CDATA #IMPLIED
  *       wallsAlpha CDATA "0"
+ *       turbidity CDATA "6"
  *       allLevelsVisible (false | true) "false"
  *       observerCameraElevationAdjusted (false | true) "true"
  *       ceillingLightColor CDATA #IMPLIED
@@ -978,6 +979,10 @@ public class HomeXMLHandler extends DefaultHandler {
     Float wallsAlpha = parseOptionalFloat(attributes, "wallsAlpha");
     if (wallsAlpha != null) {
       environment.setWallsAlpha(wallsAlpha);
+    }
+    Float turbidity = parseOptionalFloat(attributes, "turbidity");
+    if (turbidity != null) {
+      environment.setTurbidity(turbidity);
     }
     environment.setAllLevelsVisible("true".equals(attributes.get("allLevelsVisible")));
     environment.setObserverCameraElevationAdjusted(!"false".equals(attributes.get("observerCameraElevationAdjusted")));

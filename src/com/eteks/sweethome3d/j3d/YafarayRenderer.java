@@ -617,6 +617,7 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
     float [] sunDirection = getSunDirection(compass, Camera.convertTimeToTimeZone(camera.getTime(), compass.getTimeZone()));
     float [] sunColor = null;
     if (sunDirection [1] > -0.075f) {
+      float turbidity = getHome().getEnvironment().getTurbidity();
       // Retrieve sun color with SunFlow (YafaRay ComputeAttenuatedSunlight is not accessible)
       SunSkyLight sunSkyLight = new SunSkyLight();
       ParameterList parameterList = new ParameterList();
@@ -625,13 +626,14 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
           new float [] {(float)Math.sin(compass.getNorthDirection()), 0, (float)Math.cos(compass.getNorthDirection())});
       parameterList.addVectors("sundir", InterpolationType.NONE,
           new float [] {sunDirection [0], sunDirection [1], sunDirection [2]});
+      parameterList.addFloat("turbidity", turbidity);
       sunSkyLight.update(parameterList, new SunflowAPI());
       sunColor = sunSkyLight.getSunColor().getRGB();
 
       if (this.useSunSky) {
         params.put("type", "sunsky");
         params.put("from", new float [] {sunDirection [0], -sunDirection [2], sunDirection [1]});
-        params.put("turbidity", 6f);
+        params.put("turbidity", turbidity);
         params.put("power", 1.5f);
         params.put("light_samples", 12);
         params.put("background_light", this.useSunskyLight);
