@@ -329,7 +329,10 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
     Home home = getHome();
     HomeEnvironment homeEnvironment = home.getEnvironment();
     this.homeLightColor = home.getEnvironment().getLightColor();
-    this.useSunskyLight = !(home.getCamera() instanceof ObserverCamera);
+    // The sky lights the scene from an aerial view, and from an observer camera if the user asked for it
+    // (a sky texture only gives a lighting backdrop, so it can't be replaced by a sky lighting interiors)
+    this.useSunskyLight = !(home.getCamera() instanceof ObserverCamera)
+        || home.getEnvironment().isPhotoSkyLightingInterior() && home.getEnvironment().getSkyTexture() == null;
     boolean silk = isSilkShaderUsed(getQuality());
 
     float subpartSize = homeEnvironment.getSubpartSizeUnderLight();
@@ -634,14 +637,16 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
         params.put("type", "sunsky");
         params.put("from", new float [] {sunDirection [0], -sunDirection [2], sunDirection [1]});
         params.put("turbidity", turbidity);
-        params.put("power", 1.5f);
+        // Scale the sky with the sun to keep the daylight balance
+        params.put("power", 1.5f * (float)Math.pow(2, getHome().getEnvironment().getPhotoSunPower()));
         params.put("light_samples", 12);
         params.put("background_light", this.useSunskyLight);
         createBackground("background", params);
       }
 
       // Simulate additional Sun with a faraway sphere light of a color depending of the hour of the day
-      float sunPower = this.useSunskyLight ? 20 : 40;
+      float sunPower = (this.useSunskyLight ? 20 : 40)
+          * (float)Math.pow(2, getHome().getEnvironment().getPhotoSunPower());
       params.clear();
       params.put("type", "spherelight");
       params.put("color", new float [] {
@@ -764,7 +769,8 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
     params.put("adv_auto_shadow_bias_enabled", false);
     params.put("adv_shadow_bias_value", 5E-3f);
 
-    render(new BufferedImageOutput(observer, image), params);
+    render(new BufferedImageOutput(observer, image,
+        (float)Math.pow(2, getHome().getEnvironment().getPhotoExposure())), params);
   }
 
   /**
@@ -1747,15 +1753,34 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
                                            new Color(1, 0.5f, 0).getRGB(), new Color(0.5f, 1, 0).getRGB()};
     private final ImageObserver observer;
     private final BufferedImage image;
+    private final float exposureFactor;
     private int areaNumber;
 
-    private BufferedImageOutput(ImageObserver observer, BufferedImage image) {
+    private BufferedImageOutput(ImageObserver observer, BufferedImage image, float exposureFactor) {
       this.observer = observer;
       this.image = image;
+      this.exposureFactor = exposureFactor;
     }
 
     public void setPixel(int x, int y, float r, float g, float b, float a, boolean hasAlpha) {
+      if (this.exposureFactor != 1) {
+        // Pixels are sRGB encoded: apply the exposure on linear values
+        r = applyExposure(r);
+        g = applyExposure(g);
+        b = applyExposure(b);
+      }
       this.image.setRGB(x, y, new Color(Math.min(1, r), Math.min(1, g), Math.min(1, b), a).getRGB());
+    }
+
+    private float applyExposure(float component) {
+      component = Math.max(0, component);
+      float linear = component <= 0.04045f
+          ? component / 12.92f
+          : (float)Math.pow((component + 0.055) / 1.055, 2.4);
+      linear *= this.exposureFactor;
+      return linear <= 0.0031308f
+          ? linear * 12.92f
+          : (float)(1.055 * Math.pow(linear, 1 / 2.4) - 0.055);
     }
 
     public void flushArea(int x0, int y0, int x1, int y1) {
