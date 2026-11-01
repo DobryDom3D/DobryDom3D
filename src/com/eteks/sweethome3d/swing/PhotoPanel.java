@@ -707,12 +707,13 @@ public class PhotoPanel extends JPanel implements DialogView {
     advancedPanel.add(this.turbiditySpinner, new GridBagConstraints(
         1, 4, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
+    // Eighth row
     advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
-        2, 4, 3, 1, 0, 0, GridBagConstraints.CENTER,
-        GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
+        1, 5, 4, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
     // Last row
     advancedPanel.add(this.skyThroughGlassTransparentCheckBox, new GridBagConstraints(
-        1, 5, 4, 1, 0, 0, GridBagConstraints.LINE_START,
+        1, 6, 4, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
@@ -733,6 +734,7 @@ public class PhotoPanel extends JPanel implements DialogView {
             + this.lensComboBox.getPreferredSize().height + 5
             + this.rendererComboBox.getPreferredSize().height + 5
             + this.turbiditySpinner.getPreferredSize().height + 5
+            + this.skyTransparentCheckBox.getPreferredSize().height
             + this.skyThroughGlassTransparentCheckBox.getPreferredSize().height;
         root.setSize(root.getWidth(),
             root.getHeight() + (advancedComponentsVisible ? -componentsHeight : componentsHeight));
