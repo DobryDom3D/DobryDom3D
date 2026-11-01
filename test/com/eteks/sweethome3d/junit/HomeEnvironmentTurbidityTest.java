@@ -97,4 +97,33 @@ public class HomeEnvironmentTurbidityTest extends TestCase {
     assertTrue(read.isPhotoSkyTransparent());
     assertTrue(read.isPhotoSkyThroughGlassTransparent());
   }
+
+  public void testExposureAndSunPower() {
+    HomeEnvironment environment = new HomeEnvironment();
+    assertEquals(0f, environment.getPhotoExposure(), 0);
+    assertEquals(0f, environment.getPhotoSunPower(), 0);
+    environment.setPhotoExposure(100);
+    assertEquals(HomeEnvironment.MAX_EXPOSURE, environment.getPhotoExposure(), 0);
+    environment.setPhotoExposure(-100);
+    assertEquals(HomeEnvironment.MIN_EXPOSURE, environment.getPhotoExposure(), 0);
+    environment.setPhotoSunPower(100);
+    assertEquals(HomeEnvironment.MAX_SUN_POWER, environment.getPhotoSunPower(), 0);
+    environment.setPhotoSunPower(-100);
+    assertEquals(HomeEnvironment.MIN_SUN_POWER, environment.getPhotoSunPower(), 0);
+  }
+
+  public void testSkyLightingInterior() {
+    HomeEnvironment environment = new HomeEnvironment();
+    assertFalse(environment.isPhotoSkyLightingInterior());
+    final List<PropertyChangeEvent> events = new ArrayList<PropertyChangeEvent>();
+    environment.addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_LIGHTING_INTERIOR, new PropertyChangeListener() {
+        public void propertyChange(PropertyChangeEvent ev) {
+          events.add(ev);
+        }
+      });
+    environment.setPhotoSkyLightingInterior(true);
+    environment.setPhotoSkyLightingInterior(true);
+    assertTrue(environment.isPhotoSkyLightingInterior());
+    assertEquals(1, events.size());
+  }
 }

@@ -708,6 +708,9 @@ public class HomeController implements Controller {
       this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.TURBIDITY, notUndoableModificationListener);
       this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, notUndoableModificationListener);
       this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, notUndoableModificationListener);
+      this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_EXPOSURE, notUndoableModificationListener);
+      this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SUN_POWER, notUndoableModificationListener);
+      this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_LIGHTING_INTERIOR, notUndoableModificationListener);
       this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_QUALITY, notUndoableModificationListener);
       this.home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_ASPECT_RATIO, notUndoableModificationListener);
       PropertyChangeListener photoSizeModificationListener = new PropertyChangeListener() {
