@@ -218,7 +218,10 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     Home home = getHome();
     HomeEnvironment homeEnvironment = home.getEnvironment();
     this.homeLightColor = homeEnvironment.getLightColor();
-    this.useSunskyLight = !(home.getCamera() instanceof ObserverCamera);
+    // The sky lights the scene from an aerial view, and from an observer camera if the user asked for it
+    // (a sky texture only gives a lighting backdrop, so it can't be replaced by a sky lighting interiors)
+    this.useSunskyLight = !(home.getCamera() instanceof ObserverCamera)
+        || homeEnvironment.isPhotoSkyLightingInterior() && homeEnvironment.getSkyTexture() == null;
     boolean silk = isSilkShaderUsed(getQuality());
 
     float subpartSize = homeEnvironment.getSubpartSizeUnderLight();
@@ -527,6 +530,7 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     // Update Sun direction during daytime
     if (sunDirection [1] > -0.075f) {
       float turbidity = getHome().getEnvironment().getTurbidity();
+      float sunPowerFactor = (float)Math.pow(2, getHome().getEnvironment().getPhotoSunPower());
       if (this.useSunSky) {
         this.sunflow.parameter("up", new Vector3(0, 1, 0));
         this.sunflow.parameter("east",
@@ -534,6 +538,8 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
         this.sunflow.parameter("sundir", new Vector3(sunDirection [0], sunDirection [1], sunDirection [2]));
         this.sunflow.parameter("turbidity", turbidity);
         this.sunflow.parameter("samples", this.useSunskyLight ? 12 : 0);
+        // Scale the sun and the sky together to keep the daylight balance
+        this.sunflow.parameter("power", sunPowerFactor);
         this.sunSkyLightName = UUID.randomUUID().toString();
         this.sunflow.light(this.sunSkyLightName, "sunsky");
       }
@@ -551,7 +557,7 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
       float [] sunColor = sunSkyLight.getSunColor().getRGB();
 
       // Simulate additional Sun with a faraway sphere light of a color depending of the hour of the day
-      int sunPower = this.useSunskyLight ? 10 : 40;
+      float sunPower = (this.useSunskyLight ? 10 : 40) * sunPowerFactor;
       this.sunflow.parameter("radiance", null,
           (this.homeLightColor >> 16) * sunPower * (float)Math.sqrt(sunColor [0]),
           ((this.homeLightColor >> 8) & 0xFF) * sunPower * (float)Math.sqrt(sunColor [1]),
@@ -654,7 +660,8 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     // Render image with default camera
     this.sunflow.parameter("camera", CAMERA_NAME);
     this.sunflow.options(SunflowAPI.DEFAULT_OPTIONS);
-    this.sunflow.render(SunflowAPI.DEFAULT_OPTIONS, new BufferedImageDisplay(image, observer));
+    this.sunflow.render(SunflowAPI.DEFAULT_OPTIONS, new BufferedImageDisplay(image, observer,
+        (float)Math.pow(2, getHome().getEnvironment().getPhotoExposure())));
   }
 
   /**
@@ -1469,10 +1476,12 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
 
     private final ImageObserver observer;
     private final BufferedImage image;
+    private final float exposureFactor;
 
-    private BufferedImageDisplay(BufferedImage image, ImageObserver observer) {
+    private BufferedImageDisplay(BufferedImage image, ImageObserver observer, float exposureFactor) {
       this.observer = observer;
       this.image = image;
+      this.exposureFactor = exposureFactor;
     }
 
     public synchronized void imageBegin(int width, int height, int bucketSize) {
@@ -1507,14 +1516,14 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
       for (int j = 0, index = 0; j < height; j++) {
         for (int i = 0; i < width; i++, index++) {
           this.image.setRGB(x + i, y + j,
-              data [index].copy().mul(1.0f / alpha [index]).toNonLinear().toRGBA(alpha [index]));
+              data [index].copy().mul(this.exposureFactor / alpha [index]).toNonLinear().toRGBA(alpha [index]));
         }
       }
       notifyObserver(ImageObserver.SOMEBITS | BASE_INFO_FLAGS, x, y, width, height);
     }
 
     public synchronized void imageFill(int x, int y, int width, int height, Color c, float alpha) {
-      int rgba = c.copy().mul(1.0f / alpha).toNonLinear().toRGBA(alpha);
+      int rgba = c.copy().mul(this.exposureFactor / alpha).toNonLinear().toRGBA(alpha);
       for (int j = 0; j < height; j++) {
         for (int i = 0; i < width; i++) {
           this.image.setRGB(x + i, y + j, rgba);
