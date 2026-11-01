@@ -144,6 +144,11 @@ public class PhotoPanel extends JPanel implements DialogView {
   private JSpinner                 turbiditySpinner;
   private JCheckBox                skyTransparentCheckBox;
   private JCheckBox                skyThroughGlassTransparentCheckBox;
+  private JLabel                   exposureLabel;
+  private JSpinner                 exposureSpinner;
+  private JLabel                   sunPowerLabel;
+  private JSpinner                 sunPowerSpinner;
+  private JCheckBox                skyLightingInteriorCheckBox;
   private String                   dialogTitle;
   private JPanel                   photoPanel;
   private CardLayout               photoCardLayout;
@@ -500,6 +505,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     PropertyChangeListener turbidityEnabledListener = new PropertyChangeListener() {
         public void propertyChange(PropertyChangeEvent ev) {
           updateTurbidityEnabled();
+          updateSkyLightingInteriorEnabled();
         }
       };
     home.addPropertyChangeListener(Home.Property.CAMERA, turbidityEnabledListener);
@@ -535,6 +541,51 @@ public class PhotoPanel extends JPanel implements DialogView {
       });
     updateSkyTransparentEnabled();
 
+    this.exposureLabel = new JLabel();
+    this.exposureSpinner = new JSpinner(new SpinnerNumberModel(controller.getExposure(),
+        HomeEnvironment.MIN_EXPOSURE, HomeEnvironment.MAX_EXPOSURE, 0.5f));
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.EXPOSURE,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            exposureSpinner.setValue(controller.getExposure());
+          }
+        });
+    this.exposureSpinner.addChangeListener(new ChangeListener() {
+        public void stateChanged(ChangeEvent ev) {
+          controller.setExposure(((Number)exposureSpinner.getValue()).floatValue());
+        }
+      });
+
+    this.sunPowerLabel = new JLabel();
+    this.sunPowerSpinner = new JSpinner(new SpinnerNumberModel(controller.getSunPower(),
+        HomeEnvironment.MIN_SUN_POWER, HomeEnvironment.MAX_SUN_POWER, 0.5f));
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.SUN_POWER,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            sunPowerSpinner.setValue(controller.getSunPower());
+          }
+        });
+    this.sunPowerSpinner.addChangeListener(new ChangeListener() {
+        public void stateChanged(ChangeEvent ev) {
+          controller.setSunPower(((Number)sunPowerSpinner.getValue()).floatValue());
+        }
+      });
+
+    this.skyLightingInteriorCheckBox = new JCheckBox();
+    this.skyLightingInteriorCheckBox.setSelected(controller.isSkyLightingInterior());
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.SKY_LIGHTING_INTERIOR,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            skyLightingInteriorCheckBox.setSelected(controller.isSkyLightingInterior());
+          }
+        });
+    this.skyLightingInteriorCheckBox.addItemListener(new ItemListener() {
+        public void itemStateChanged(ItemEvent ev) {
+          controller.setSkyLightingInterior(skyLightingInteriorCheckBox.isSelected());
+        }
+      });
+    updateSkyLightingInteriorEnabled();
+
     final JComponent view3D = (JComponent)controller.get3DView();
     controller.set3DViewAspectRatio((float)view3D.getWidth() / view3D.getHeight());
 
@@ -567,6 +618,12 @@ public class PhotoPanel extends JPanel implements DialogView {
         PhotoPanel.class, "skyTransparentCheckBox.text"));
     this.skyThroughGlassTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "skyThroughGlassTransparentCheckBox.text"));
+    this.exposureLabel.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "exposureLabel.text"));
+    this.sunPowerLabel.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "sunPowerLabel.text"));
+    this.skyLightingInteriorCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "skyLightingInteriorCheckBox.text"));
     this.dialogTitle = preferences.getLocalizedString(PhotoPanel.class, "createPhoto.title");
     Window window = SwingUtilities.getWindowAncestor(this);
     if (window != null) {
@@ -601,6 +658,14 @@ public class PhotoPanel extends JPanel implements DialogView {
           PhotoPanel.class, "skyTransparentCheckBox.mnemonic")).getKeyCode());
       this.skyThroughGlassTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "skyThroughGlassTransparentCheckBox.mnemonic")).getKeyCode());
+      this.exposureLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "exposureLabel.mnemonic")).getKeyCode());
+      this.exposureLabel.setLabelFor(this.exposureSpinner);
+      this.sunPowerLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "sunPowerLabel.mnemonic")).getKeyCode());
+      this.sunPowerLabel.setLabelFor(this.sunPowerSpinner);
+      this.skyLightingInteriorCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "skyLightingInteriorCheckBox.mnemonic")).getKeyCode());
     }
   }
 
@@ -711,9 +776,29 @@ public class PhotoPanel extends JPanel implements DialogView {
     advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
         1, 5, 4, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
-    // Last row
+    // Ninth row
     advancedPanel.add(this.skyThroughGlassTransparentCheckBox, new GridBagConstraints(
         1, 6, 4, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
+    // Tenth row
+    advancedPanel.add(this.exposureLabel, new GridBagConstraints(
+        0, 7, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
+    this.exposureLabel.setHorizontalAlignment(labelAlignment);
+    advancedPanel.add(this.exposureSpinner, new GridBagConstraints(
+        1, 7, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
+    // Eleventh row
+    advancedPanel.add(this.sunPowerLabel, new GridBagConstraints(
+        0, 8, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
+    this.sunPowerLabel.setHorizontalAlignment(labelAlignment);
+    advancedPanel.add(this.sunPowerSpinner, new GridBagConstraints(
+        1, 8, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
+    // Last row
+    advancedPanel.add(this.skyLightingInteriorCheckBox, new GridBagConstraints(
+        1, 9, 4, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
@@ -735,7 +820,10 @@ public class PhotoPanel extends JPanel implements DialogView {
             + this.rendererComboBox.getPreferredSize().height + 5
             + this.turbiditySpinner.getPreferredSize().height + 5
             + this.skyTransparentCheckBox.getPreferredSize().height
-            + this.skyThroughGlassTransparentCheckBox.getPreferredSize().height;
+            + this.skyThroughGlassTransparentCheckBox.getPreferredSize().height + 5
+            + this.exposureSpinner.getPreferredSize().height + 5
+            + this.sunPowerSpinner.getPreferredSize().height + 5
+            + this.skyLightingInteriorCheckBox.getPreferredSize().height;
         root.setSize(root.getWidth(),
             root.getHeight() + (advancedComponentsVisible ? -componentsHeight : componentsHeight));
       }
@@ -758,6 +846,11 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.turbiditySpinner.setVisible(visible);
     this.skyTransparentCheckBox.setVisible(visible);
     this.skyThroughGlassTransparentCheckBox.setVisible(visible);
+    this.exposureLabel.setVisible(visible);
+    this.exposureSpinner.setVisible(visible);
+    this.sunPowerLabel.setVisible(visible);
+    this.sunPowerSpinner.setVisible(visible);
+    this.skyLightingInteriorCheckBox.setVisible(visible);
   }
 
   /**
@@ -778,6 +871,16 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.turbiditySpinner.setEnabled(this.photoCreationExecutor == null
         && !(this.home.getCamera() instanceof ObserverCamera
              && this.home.getEnvironment().getSkyTexture() != null));
+  }
+
+  /**
+   * Enables the check box making the sky light interiors unless a photo is being created
+   * or the view is not from an observer camera, or uses a sky texture.
+   */
+  private void updateSkyLightingInteriorEnabled() {
+    this.skyLightingInteriorCheckBox.setEnabled(this.photoCreationExecutor == null
+        && this.home.getCamera() instanceof ObserverCamera
+        && this.home.getEnvironment().getSkyTexture() == null);
   }
 
   /**
@@ -913,6 +1016,9 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.turbiditySpinner.setEnabled(false);
     this.skyTransparentCheckBox.setEnabled(false);
     this.skyThroughGlassTransparentCheckBox.setEnabled(false);
+    this.exposureSpinner.setEnabled(false);
+    this.sunPowerSpinner.setEnabled(false);
+    this.skyLightingInteriorCheckBox.setEnabled(false);
     getActionMap().get(ActionType.SAVE_PHOTO).setEnabled(false);
     getRootPane().setDefaultButton(this.createButton);
     this.createButton.setAction(getActionMap().get(ActionType.STOP_PHOTO_CREATION));
@@ -1020,6 +1126,9 @@ public class PhotoPanel extends JPanel implements DialogView {
             PhotoPanel.this.photoCreationExecutor = null;
             updateTurbidityEnabled();
             updateSkyTransparentEnabled();
+            exposureSpinner.setEnabled(true);
+            sunPowerSpinner.setEnabled(true);
+            updateSkyLightingInteriorEnabled();
           }
         });
     }
