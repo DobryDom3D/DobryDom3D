@@ -117,6 +117,9 @@ import com.eteks.sweethome3d.tools.URLContent;
  *       photoQuality CDATA "0"
  *       photoSkyTransparent (false | true) "false"
  *       photoSkyThroughGlassTransparent (false | true) "false"
+ *       photoExposure CDATA "0"
+ *       photoSunPower CDATA "0"
+ *       photoSkyLightingInterior (false | true) "false"
  *       videoWidth CDATA "320"
  *       videoAspectRatio (RATIO_4_3 | RATIO_16_9 | RATIO_24_10) "RATIO_4_3"
  *       videoQuality CDATA "0"
@@ -1022,6 +1025,15 @@ public class HomeXMLHandler extends DefaultHandler {
     }
     environment.setPhotoSkyTransparent("true".equals(attributes.get("photoSkyTransparent")));
     environment.setPhotoSkyThroughGlassTransparent("true".equals(attributes.get("photoSkyThroughGlassTransparent")));
+    Float photoExposure = parseOptionalFloat(attributes, "photoExposure");
+    if (photoExposure != null) {
+      environment.setPhotoExposure(photoExposure);
+    }
+    Float photoSunPower = parseOptionalFloat(attributes, "photoSunPower");
+    if (photoSunPower != null) {
+      environment.setPhotoSunPower(photoSunPower);
+    }
+    environment.setPhotoSkyLightingInterior("true".equals(attributes.get("photoSkyLightingInterior")));
     Integer photoQuality = parseOptionalInteger(attributes, "photoQuality");
     if (photoQuality != null) {
       environment.setPhotoQuality(photoQuality);

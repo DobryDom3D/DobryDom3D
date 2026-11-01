@@ -38,7 +38,8 @@ public abstract class AbstractPhotoController implements Controller {
   /**
    * The properties that may be edited by the view associated to this controller. 
    */
-  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT, SKY_THROUGH_GLASS_TRANSPARENT}
+  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT, SKY_THROUGH_GLASS_TRANSPARENT,
+                        EXPOSURE, SUN_POWER, SKY_LIGHTING_INTERIOR}
   
   private final Home                  home;
   private final View                  view3D;
@@ -54,6 +55,9 @@ public abstract class AbstractPhotoController implements Controller {
   private float                       turbidity;
   private boolean                     skyTransparent;
   private boolean                     skyThroughGlassTransparent;
+  private float                       exposure;
+  private float                       sunPower;
+  private boolean                     skyLightingInterior;
 
   public AbstractPhotoController(Home home,
                                  UserPreferences preferences,
@@ -74,6 +78,9 @@ public abstract class AbstractPhotoController implements Controller {
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.TURBIDITY, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_EXPOSURE, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SUN_POWER, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_LIGHTING_INTERIOR, listener);
     updateProperties();
   }
 
@@ -100,6 +107,9 @@ public abstract class AbstractPhotoController implements Controller {
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.TURBIDITY, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_EXPOSURE, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SUN_POWER, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_LIGHTING_INTERIOR, this);
       } else if (HomeEnvironment.Property.PHOTO_WIDTH.name().equals(ev.getPropertyName())) {
         controller.setWidth((Integer)ev.getNewValue(), false);
       } else if (HomeEnvironment.Property.PHOTO_HEIGHT.name().equals(ev.getPropertyName())) {
@@ -116,6 +126,12 @@ public abstract class AbstractPhotoController implements Controller {
         controller.setSkyTransparent((Boolean)ev.getNewValue());
       } else if (HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT.name().equals(ev.getPropertyName())) {
         controller.setSkyThroughGlassTransparent((Boolean)ev.getNewValue());
+      } else if (HomeEnvironment.Property.PHOTO_EXPOSURE.name().equals(ev.getPropertyName())) {
+        controller.setExposure((Float)ev.getNewValue());
+      } else if (HomeEnvironment.Property.PHOTO_SUN_POWER.name().equals(ev.getPropertyName())) {
+        controller.setSunPower((Float)ev.getNewValue());
+      } else if (HomeEnvironment.Property.PHOTO_SKY_LIGHTING_INTERIOR.name().equals(ev.getPropertyName())) {
+        controller.setSkyLightingInterior((Boolean)ev.getNewValue());
       }
     }
   }
@@ -154,6 +170,9 @@ public abstract class AbstractPhotoController implements Controller {
     setTurbidity(homeEnvironment.getTurbidity());
     setSkyTransparent(homeEnvironment.isPhotoSkyTransparent());
     setSkyThroughGlassTransparent(homeEnvironment.isPhotoSkyThroughGlassTransparent());
+    setExposure(homeEnvironment.getPhotoExposure());
+    setSunPower(homeEnvironment.getPhotoSunPower());
+    setSkyLightingInterior(homeEnvironment.isPhotoSkyLightingInterior());
   }
   
   /**
@@ -346,6 +365,65 @@ public abstract class AbstractPhotoController implements Controller {
    */
   public boolean isSkyThroughGlassTransparent() {
     return this.skyThroughGlassTransparent;
+  }
+
+  /**
+   * Sets the edited exposure in stops.
+   */
+  public void setExposure(float exposure) {
+    exposure = Math.max(HomeEnvironment.MIN_EXPOSURE, Math.min(HomeEnvironment.MAX_EXPOSURE, exposure));
+    if (this.exposure != exposure) {
+      float oldExposure = this.exposure;
+      this.exposure = exposure;
+      this.propertyChangeSupport.firePropertyChange(Property.EXPOSURE.name(), oldExposure, exposure);
+      this.home.getEnvironment().setPhotoExposure(exposure);
+    }
+  }
+
+  /**
+   * Returns the edited exposure in stops.
+   */
+  public float getExposure() {
+    return this.exposure;
+  }
+
+  /**
+   * Sets the edited sun power in stops.
+   */
+  public void setSunPower(float sunPower) {
+    sunPower = Math.max(HomeEnvironment.MIN_SUN_POWER, Math.min(HomeEnvironment.MAX_SUN_POWER, sunPower));
+    if (this.sunPower != sunPower) {
+      float oldSunPower = this.sunPower;
+      this.sunPower = sunPower;
+      this.propertyChangeSupport.firePropertyChange(Property.SUN_POWER.name(), oldSunPower, sunPower);
+      this.home.getEnvironment().setPhotoSunPower(sunPower);
+    }
+  }
+
+  /**
+   * Returns the edited sun power in stops.
+   */
+  public float getSunPower() {
+    return this.sunPower;
+  }
+
+  /**
+   * Sets whether the sky should light the interiors seen from an observer camera in the edited photo.
+   */
+  public void setSkyLightingInterior(boolean skyLightingInterior) {
+    if (this.skyLightingInterior != skyLightingInterior) {
+      this.skyLightingInterior = skyLightingInterior;
+      this.propertyChangeSupport.firePropertyChange(Property.SKY_LIGHTING_INTERIOR.name(),
+          !skyLightingInterior, skyLightingInterior);
+      this.home.getEnvironment().setPhotoSkyLightingInterior(skyLightingInterior);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky should light the interiors seen from an observer camera in the edited photo.
+   */
+  public boolean isSkyLightingInterior() {
+    return this.skyLightingInterior;
   }
 
   /**

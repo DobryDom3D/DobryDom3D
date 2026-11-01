@@ -43,10 +43,20 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   public static final float DEFAULT_TURBIDITY = 6f;
 
   /**
+   * The minimum and maximum values of the exposure and of the sun power used in photos,
+   * both expressed in stops (each stop doubles the brightness, 0 keeping the default look).
+   */
+  public static final float MIN_EXPOSURE = -6f;
+  public static final float MAX_EXPOSURE = 6f;
+  public static final float MIN_SUN_POWER = -6f;
+  public static final float MAX_SUN_POWER = 10f;
+
+  /**
    * The environment properties that may change.
    */
   public enum Property {OBSERVER_CAMERA_ELEVATION_ADJUSTED, GROUND_COLOR, GROUND_TEXTURE, BACKGROUND_IMAGE_VISIBLE_ON_GROUND_3D,
                         SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, PHOTO_SKY_TRANSPARENT, PHOTO_SKY_THROUGH_GLASS_TRANSPARENT,
+                        PHOTO_EXPOSURE, PHOTO_SUN_POWER, PHOTO_SKY_LIGHTING_INTERIOR,
                         WALLS_ALPHA, DRAWING_MODE, SUBPART_SIZE_UNDER_LIGHT, ALL_LEVELS_VISIBLE,
                         PHOTO_WIDTH, PHOTO_HEIGHT, PHOTO_ASPECT_RATIO, PHOTO_QUALITY,
                         VIDEO_WIDTH, VIDEO_ASPECT_RATIO, VIDEO_QUALITY, VIDEO_SPEED, VIDEO_FRAME_RATE, VIDEO_CAMERA_PATH};
@@ -68,6 +78,9 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private float                           turbidity;
   private boolean                         photoSkyTransparent;
   private boolean                         photoSkyThroughGlassTransparent;
+  private float                           photoExposure;
+  private float                           photoSunPower;
+  private boolean                         photoSkyLightingInterior;
   private float                           wallsAlpha;
   private DrawingMode                     drawingMode;
   private float                           subpartSizeUnderLight;
@@ -395,6 +408,68 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
       this.photoSkyThroughGlassTransparent = photoSkyThroughGlassTransparent;
       firePropertyChange(Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT.name(),
           !photoSkyThroughGlassTransparent, photoSkyThroughGlassTransparent);
+    }
+  }
+
+  /**
+   * Returns the exposure of photos in stops.
+   */
+  public float getPhotoExposure() {
+    return this.photoExposure;
+  }
+
+  /**
+   * Sets the exposure of photos in stops, clamped between {@link #MIN_EXPOSURE}
+   * and {@link #MAX_EXPOSURE}, and fires a <code>PropertyChangeEvent</code>.
+   * Each stop doubles the brightness of the whole photo.
+   */
+  public void setPhotoExposure(float photoExposure) {
+    photoExposure = Math.max(MIN_EXPOSURE, Math.min(MAX_EXPOSURE, photoExposure));
+    if (photoExposure != this.photoExposure) {
+      float oldPhotoExposure = this.photoExposure;
+      this.photoExposure = photoExposure;
+      firePropertyChange(Property.PHOTO_EXPOSURE.name(), oldPhotoExposure, photoExposure);
+    }
+  }
+
+  /**
+   * Returns the power of the sun and of the sky in photos, in stops relative to the default power.
+   */
+  public float getPhotoSunPower() {
+    return this.photoSunPower;
+  }
+
+  /**
+   * Sets the power of the sun in photos in stops, clamped between {@link #MIN_SUN_POWER}
+   * and {@link #MAX_SUN_POWER}, and fires a <code>PropertyChangeEvent</code>.
+   * Each stop doubles the power of the sun.
+   */
+  public void setPhotoSunPower(float photoSunPower) {
+    photoSunPower = Math.max(MIN_SUN_POWER, Math.min(MAX_SUN_POWER, photoSunPower));
+    if (photoSunPower != this.photoSunPower) {
+      float oldPhotoSunPower = this.photoSunPower;
+      this.photoSunPower = photoSunPower;
+      firePropertyChange(Property.PHOTO_SUN_POWER.name(), oldPhotoSunPower, photoSunPower);
+    }
+  }
+
+  /**
+   * Returns <code>true</code> if the sky should light the scene in photos created from an
+   * observer camera, as it does from the aerial view, to let daylight come through windows.
+   */
+  public boolean isPhotoSkyLightingInterior() {
+    return this.photoSkyLightingInterior;
+  }
+
+  /**
+   * Sets whether the sky should light the scene in photos created from an observer camera,
+   * and fires a <code>PropertyChangeEvent</code>.
+   */
+  public void setPhotoSkyLightingInterior(boolean photoSkyLightingInterior) {
+    if (photoSkyLightingInterior != this.photoSkyLightingInterior) {
+      this.photoSkyLightingInterior = photoSkyLightingInterior;
+      firePropertyChange(Property.PHOTO_SKY_LIGHTING_INTERIOR.name(),
+          !photoSkyLightingInterior, photoSkyLightingInterior);
     }
   }
 
