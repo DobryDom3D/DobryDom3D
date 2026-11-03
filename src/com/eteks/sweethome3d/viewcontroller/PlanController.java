@@ -175,6 +175,16 @@ public class PlanController extends FurnitureController implements Controller {
   // clears it) as the polyline's initial point, since the raw mouse-press
   // coordinates it would otherwise use are never snapped.
   private float []                        nextPolylineStartPoint;
+  // When Shift is held on the very first click of a new polyline and that
+  // click snaps onto the free start or end point of another, still open
+  // polyline, this holds that other polyline so PolylineDrawingState.enter()
+  // can absorb (join) its points into the new polyline instead of starting a
+  // brand new, disconnected shape. Cleared as soon as it is consumed, just
+  // like nextPolylineStartPoint above.
+  private Polyline                        nextPolylineJoinedPolyline;
+  // Whether the endpoint matched above is nextPolylineJoinedPolyline's first
+  // point (true) or its last point (false).
+  private boolean                         nextPolylineJoinedAtStart;
   private final ControllerState       polylineDrawingState;
   private final ControllerState       polylineResizeState;
   private final ControllerState       labelCreationState;
@@ -1680,6 +1690,166 @@ public class PlanController extends FurnitureController implements Controller {
       this.home.setSelectedItems(Arrays.asList(walls [0]));
     }
   }
+
+ //TODO--------------------------------------------------------------------------------------------------------- 
+  /**
+   * Controls how selected polylines are joined.
+   */
+  public void joinSelectedPolylines() {
+    List<Selectable> selectedItems = this.home.getSelectedItems();
+    List<Polyline> selectedPolylines = Home.getPolylinesSubList(selectedItems);
+
+    if (selectedPolylines.size() == 2) {
+      Polyline poly1 = selectedPolylines.get(0);
+      Polyline poly2 = selectedPolylines.get(1);
+
+      float [] [] pts1 = poly1.getPoints();
+      float [] [] pts2 = poly2.getPoints();
+
+      if (pts1.length < 2 || pts2.length < 2) {
+        return; // Need at least two points per polyline to define a segment
+      }
+
+      // 1. Find the closest endpoints between the two polylines
+      float [] start1 = pts1 [0];
+      float [] end1 = pts1 [pts1.length - 1];
+      float [] start2 = pts2 [0];
+      float [] end2 = pts2 [pts2.length - 1];
+
+      double dSS = Point2D.distanceSq(start1 [0], start1 [1], start2 [0], start2 [1]);
+      double dSE = Point2D.distanceSq(start1 [0], start1 [1], end2 [0], end2 [1]);
+      double dES = Point2D.distanceSq(end1 [0], end1 [1], start2 [0], start2 [1]);
+      double dEE = Point2D.distanceSq(end1 [0], end1 [1], end2 [0], end2 [1]);
+
+      double minDistance = Math.min(Math.min(dSS, dSE), Math.min(dES, dEE));
+
+      int p1Index = (minDistance == dSS || minDistance == dSE)
+          ? 0
+          : pts1.length - 1;
+      int p2Index = (minDistance == dSS || minDistance == dES)
+          ? 0
+          : pts2.length - 1;
+
+      // 2. Identify the terminal segments leading to those endpoints
+      float [] p1Terminal = pts1 [p1Index];
+      float [] p1Inner = pts1 [p1Index == 0
+          ? 1
+          : pts1.length - 2];
+      float [] p2Terminal = pts2 [p2Index];
+      float [] p2Inner = pts2 [p2Index == 0
+          ? 1
+          : pts2.length - 2];
+
+      // 3. Check parallelism (1 deg close) to avoid infinite intersections
+      double firstSegmentAngle = Math.atan2(p1Terminal [1] - p1Inner [1], p1Terminal [0] - p1Inner [0]);
+      double secondSegmentAngle = Math.atan2(p2Terminal [1] - p2Inner [1], p2Terminal [0] - p2Inner [0]);
+      double segmentsAngle = Math.abs(firstSegmentAngle - secondSegmentAngle) % Math.PI;
+      boolean parallel = segmentsAngle <= Math.PI / 360 || (Math.PI - segmentsAngle) <= Math.PI / 360;
+
+      float [] joinPoint;
+      if (!parallel) {
+        joinPoint = computeIntersection(p1Inner [0], p1Inner [1], p1Terminal [0], p1Terminal [1], p2Inner [0],
+            p2Inner [1], p2Terminal [0], p2Terminal [1]);
+      } else {
+        // If parallel, simply snap them to the midpoint of the gap
+        joinPoint = new float [] {(p1Terminal [0] + p2Terminal [0]) / 2f, (p1Terminal [1] + p2Terminal [1]) / 2f};
+      }
+
+      if (joinPoint != null) {
+        // Clone original points for the undoable edit
+        float [] [] oldPts1 = new float [pts1.length] [];
+        for (int i = 0; i < pts1.length; i++)
+          oldPts1 [i] = pts1 [i].clone();
+        float [] [] oldPts2 = new float [pts2.length] [];
+        for (int i = 0; i < pts2.length; i++)
+          oldPts2 [i] = pts2 [i].clone();
+
+        doJoinPolylines(poly1, poly2, p1Index, p2Index, joinPoint);
+
+        this.undoSupport.postEdit(new PolylinesJoiningUndoableEdit(this, this.preferences,
+            selectedItems.toArray(new Selectable [selectedItems.size()]), home.isAllLevelsSelection(), poly1, poly2,
+            oldPts1, oldPts2, p1Index, p2Index, joinPoint));
+      }
+    }
+  }
+
+  /**
+   * Modifies the given polylines so their endpoints meet at the join point.
+   */
+  private void doJoinPolylines(Polyline poly1, Polyline poly2, int p1Index, int p2Index, float [] joinPoint) {
+    float [] [] pts1 = poly1.getPoints();
+    float [] [] pts2 = poly2.getPoints();
+
+    // Create new arrays so the view correctly detects a change
+    float [] [] newPts1 = new float [pts1.length] [2];
+    for (int i = 0; i < pts1.length; i++) {
+      newPts1 [i] [0] = pts1 [i] [0];
+      newPts1 [i] [1] = pts1 [i] [1];
+    }
+    newPts1 [p1Index] [0] = joinPoint [0];
+    newPts1 [p1Index] [1] = joinPoint [1];
+    poly1.setPoints(newPts1);
+
+    float [] [] newPts2 = new float [pts2.length] [2];
+    for (int i = 0; i < pts2.length; i++) {
+      newPts2 [i] [0] = pts2 [i] [0];
+      newPts2 [i] [1] = pts2 [i] [1];
+    }
+    newPts2 [p2Index] [0] = joinPoint [0];
+    newPts2 [p2Index] [1] = joinPoint [1];
+    poly2.setPoints(newPts2);
+
+    this.home.setSelectedItems(Arrays.asList(poly1, poly2));
+  }
+
+  /**
+   * Undoable edit for joining polylines.
+   */
+  private static class PolylinesJoiningUndoableEdit extends LocalizedUndoableEdit {
+    private final PlanController controller;
+    private final Selectable []  oldSelection;
+    private final boolean        allLevelsSelection;
+
+    private final Polyline       poly1;
+    private final Polyline       poly2;
+    private final float [] []    oldPts1;
+    private final float [] []    oldPts2;
+    private final int            p1Index;
+    private final int            p2Index;
+    private final float []       joinPoint;
+
+    public PolylinesJoiningUndoableEdit(PlanController controller, UserPreferences preferences,
+                                        Selectable [] oldSelection, boolean allLevelsSelection, Polyline poly1,
+                                        Polyline poly2, float [] [] oldPts1, float [] [] oldPts2, int p1Index,
+                                        int p2Index, float [] joinPoint) {
+      super(preferences, PlanController.class, "undoJoinPolylinesName");
+      this.controller = controller;
+      this.oldSelection = oldSelection;
+      this.allLevelsSelection = allLevelsSelection;
+      this.poly1 = poly1;
+      this.poly2 = poly2;
+      this.oldPts1 = oldPts1;
+      this.oldPts2 = oldPts2;
+      this.p1Index = p1Index;
+      this.p2Index = p2Index;
+      this.joinPoint = joinPoint;
+    }
+
+    @Override
+    public void undo() throws CannotUndoException {
+      super.undo();
+      this.poly1.setPoints(this.oldPts1);
+      this.poly2.setPoints(this.oldPts2);
+      this.controller.selectAndShowItems(Arrays.asList(this.oldSelection), this.allLevelsSelection);
+    }
+
+    @Override
+    public void redo() throws CannotRedoException {
+      super.redo();
+      this.controller.doJoinPolylines(this.poly1, this.poly2, this.p1Index, this.p2Index, this.joinPoint);
+    }
+  }
+  //---------------------------------------------------------------------------------------------------------
 
   /**
    * Controls the direction reverse of selected walls.
@@ -6815,6 +6985,88 @@ public class PlanController extends FurnitureController implements Controller {
       polylinesIndex [i] = homePolylines.lastIndexOf(newPolylines [i]);
     }
     postCreatePolylines(newPolylines, polylinesIndex, oldSelection, basePlanLocked, allLevelsSelection);
+  }
+
+  /**
+   * Posts an undoable operation for <code>newPolyline</code>, a polyline
+   * created while drawing by absorbing (joining) an existing open polyline
+   * whose free endpoint was Shift-clicked as the new polyline's first point.
+   * <code>joinedPolyline</code> was already removed from home by the time
+   * this is called, its geometry now folded into <code>newPolyline</code>;
+   * undo must bring it back and remove <code>newPolyline</code>, and redo
+   * must reapply both changes together.
+   */
+  private void postCreateJoinedPolyline(Polyline newPolyline, Polyline joinedPolyline, int joinedPolylineIndex,
+                                        List<Selectable> oldSelectedItems, boolean oldBasePlanLocked,
+                                        boolean oldAllLevelsSelection) {
+    boolean basePlanLocked = this.home.isBasePlanLocked();
+    if (basePlanLocked) {
+      // Unlock base plan if the new polyline is a part of it
+      basePlanLocked &= !isItemPartOfBasePlan(newPolyline);
+    }
+    this.home.setBasePlanLocked(basePlanLocked);
+
+    Selectable [] oldSelection = oldSelectedItems.toArray(new Selectable [oldSelectedItems.size()]);
+    int newPolylineIndex = this.home.getPolylines().lastIndexOf(newPolyline);
+    Level polylinesLevel = this.home.getSelectedLevel();
+    this.undoSupport.postEdit(new PolylineJoinedCreationUndoableEdit(this, this.preferences, oldSelection,
+        oldBasePlanLocked, oldAllLevelsSelection, newPolyline, newPolylineIndex, polylinesLevel, basePlanLocked,
+        joinedPolyline, joinedPolylineIndex));
+  }
+
+  /**
+   * Undoable edit for a polyline created by joining an existing open
+   * polyline into the one being drawn. Combines, as a single undo step, the
+   * creation of the merged polyline and the removal of the polyline it
+   * absorbed.
+   */
+  private static class PolylineJoinedCreationUndoableEdit extends LocalizedUndoableEdit {
+    private final PlanController controller;
+    private final Selectable []  oldSelection;
+    private final boolean        oldBasePlanLocked;
+    private final boolean        oldAllLevelsSelection;
+    private final Polyline       newPolyline;
+    private final int            newPolylineIndex;
+    private final Level          polylinesLevel;
+    private final boolean        newBasePlanLocked;
+    private final Polyline       joinedPolyline;
+    private final int            joinedPolylineIndex;
+
+    public PolylineJoinedCreationUndoableEdit(PlanController controller, UserPreferences preferences,
+                                              Selectable [] oldSelection, boolean oldBasePlanLocked,
+                                              boolean oldAllLevelsSelection, Polyline newPolyline,
+                                              int newPolylineIndex, Level polylinesLevel, boolean newBasePlanLocked,
+                                              Polyline joinedPolyline, int joinedPolylineIndex) {
+      super(preferences, PlanController.class, "undoCreatePolylinesName");
+      this.controller = controller;
+      this.oldSelection = oldSelection;
+      this.oldBasePlanLocked = oldBasePlanLocked;
+      this.oldAllLevelsSelection = oldAllLevelsSelection;
+      this.newPolyline = newPolyline;
+      this.newPolylineIndex = newPolylineIndex;
+      this.polylinesLevel = polylinesLevel;
+      this.newBasePlanLocked = newBasePlanLocked;
+      this.joinedPolyline = joinedPolyline;
+      this.joinedPolylineIndex = joinedPolylineIndex;
+    }
+
+    @Override
+    public void undo() throws CannotUndoException {
+      super.undo();
+      this.controller.doDeletePolylines(new Polyline [] {this.newPolyline}, this.oldBasePlanLocked);
+      this.controller.doAddPolylines(new Polyline [] {this.joinedPolyline}, new int [] {this.joinedPolylineIndex},
+          null, this.polylinesLevel, this.oldBasePlanLocked);
+      this.controller.selectAndShowItems(Arrays.asList(this.oldSelection), this.oldAllLevelsSelection);
+    }
+
+    @Override
+    public void redo() throws CannotRedoException {
+      super.redo();
+      this.controller.doDeletePolylines(new Polyline [] {this.joinedPolyline}, this.newBasePlanLocked);
+      this.controller.doAddPolylines(new Polyline [] {this.newPolyline}, new int [] {this.newPolylineIndex}, null,
+          this.polylinesLevel, this.newBasePlanLocked);
+      this.controller.selectAndShowItems(Arrays.asList(new Selectable [] {this.newPolyline}), false);
+    }
   }
 
   /**
@@ -15168,6 +15420,51 @@ public class PlanController extends FurnitureController implements Controller {
   }
 
   /**
+   * The result of {@link #findOpenPolylineEndpointAt(float, float, Polyline)}:
+   * an existing open polyline together with which one of its two free
+   * endpoints was matched.
+   */
+  private static class PolylineEndpoint {
+    private final Polyline polyline;
+    private final boolean  atStart;
+
+    private PolylineEndpoint(Polyline polyline, boolean atStart) {
+      this.polyline = polyline;
+      this.atStart = atStart;
+    }
+  }
+
+  /**
+   * Returns the existing open (not closed) polyline at the current level,
+   * other than <code>excludedPolyline</code>, whose start or end point
+   * exactly matches (<code>x</code>, <code>y</code>), together with which
+   * end matched, or <code>null</code> if no open polyline has a free
+   * endpoint there. Used to detect when Shift-clicking the first point of a
+   * new polyline should join it onto an existing one instead of starting an
+   * unrelated shape.
+   */
+  private PolylineEndpoint findOpenPolylineEndpointAt(float x, float y, Polyline excludedPolyline) {
+    for (Polyline polyline : this.home.getPolylines()) {
+      if (polyline == excludedPolyline || polyline.isClosedPath()) {
+        continue;
+      }
+      float [] [] points = polyline.getPoints();
+      if (points.length < 2) {
+        continue;
+      }
+      float [] start = points [0];
+      if (Math.abs(start [0] - x) < 0.001f && Math.abs(start [1] - y) < 0.001f) {
+        return new PolylineEndpoint(polyline, true);
+      }
+      float [] end = points [points.length - 1];
+      if (Math.abs(end [0] - x) < 0.001f && Math.abs(end [1] - y) < 0.001f) {
+        return new PolylineEndpoint(polyline, false);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Polyline creation state. This state manages transition to
    * other modes, and initial polyline creation.
    */
@@ -15252,6 +15549,31 @@ public class PlanController extends FurnitureController implements Controller {
       PlanController.this.nextPolylineStartPoint = snapPoint != null
           ? new float [] {snapPoint.x, snapPoint.y}
           : null;
+
+      // SHIFT + ENDPOINT SNAP on the very first click of a new polyline: if
+      // the snapped point coincides with the free start or end point of an
+      // existing, still open polyline, treat this the same way Shift
+      // already treats the closing click - as an explicit request - except
+      // here it means "extend that polyline" rather than "close this one".
+      // PolylineDrawingState.enter() consumes nextPolylineJoinedPolyline the
+      // same way it consumes nextPolylineStartPoint above, prepending the
+      // absorbed polyline's own points ahead of the point just clicked so
+      // drawing continues as a single, longer polyline. Later, Shift-
+      // clicking back onto that absorbed polyline's other (still free) end
+      // closes the whole, now-joined shape through the existing closing
+      // logic in PolylineDrawingState.pressMouse() - it needs no change
+      // since that far endpoint becomes this polyline's point 0 below.
+      if (shiftDown && snapPoint != null && snapPoint.type == SnapType.ENDPOINT) {
+        PolylineEndpoint joinMatch = findOpenPolylineEndpointAt(snapPoint.x, snapPoint.y, null);
+        if (joinMatch != null) {
+          PlanController.this.nextPolylineJoinedPolyline = joinMatch.polyline;
+          PlanController.this.nextPolylineJoinedAtStart = joinMatch.atStart;
+        } else {
+          PlanController.this.nextPolylineJoinedPolyline = null;
+        }
+      } else {
+        PlanController.this.nextPolylineJoinedPolyline = null;
+      }
 
       // Change state to PolylineDrawingState
       setState(getPolylineDrawingState());
@@ -15381,6 +15703,15 @@ public class PlanController extends FurnitureController implements Controller {
     private boolean          curvedPolyline;
     private long             lastPointCreationTime;
     private SnapPoint        hoveredSnapPoint;
+    // Set from PlanController.this.nextPolylineJoinedPolyline in enter() when
+    // this polyline's very first point was Shift-clicked onto the free
+    // endpoint of an existing open polyline: that polyline is absorbed
+    // (joined) into this one instead of remaining separate. See
+    // createAndSelectPolyline(), validateDrawnPolyline() and exit().
+    private Polyline         joinedPolyline;
+    private boolean          joinedAtStart;
+    private float [] []      joinPrefixPoints;
+    private int              joinedPolylineIndexAtDeletion;
 
     @Override
     public Mode getMode() {
@@ -15447,6 +15778,35 @@ public class PlanController extends FurnitureController implements Controller {
             this.yPreviousPoint = snapPoint.y;
           }
         }
+      }
+
+      // Consume the join recorded (if any) in PolylineCreationState.pressMouse().
+      // Build the list of points to prepend ahead of xPreviousPoint/
+      // yPreviousPoint so the absorbed polyline's far endpoint - not the
+      // shared join point - ends up as this polyline's own point 0, exactly
+      // where the existing Shift-close logic expects the start point to be.
+      this.joinedPolyline = PlanController.this.nextPolylineJoinedPolyline;
+      this.joinedAtStart = PlanController.this.nextPolylineJoinedAtStart;
+      PlanController.this.nextPolylineJoinedPolyline = null;
+      if (this.joinedPolyline != null) {
+        float [] [] otherPoints = this.joinedPolyline.getPoints();
+        this.joinPrefixPoints = new float [otherPoints.length - 1] [];
+        if (this.joinedAtStart) {
+          // The matched endpoint was the other polyline's first point: walk
+          // its points backwards from the far end so the prefix ends right
+          // where this polyline's first point begins.
+          for (int i = 0; i < this.joinPrefixPoints.length; i++) {
+            this.joinPrefixPoints [i] = otherPoints [otherPoints.length - 1 - i].clone();
+          }
+        } else {
+          // The matched endpoint was the other polyline's last point: its
+          // points already end there, so keep them in the same order.
+          for (int i = 0; i < this.joinPrefixPoints.length; i++) {
+            this.joinPrefixPoints [i] = otherPoints [i].clone();
+          }
+        }
+      } else {
+        this.joinPrefixPoints = null;
       }
 
       setDuplicationActivated(wasDuplicationActivatedLastMousePress());
@@ -15581,7 +15941,38 @@ public class PlanController extends FurnitureController implements Controller {
      */
     private Polyline createAndSelectPolyline(float xStart, float yStart,
                                              float xEnd, float yEnd) {
-      Polyline newPolyline = createPolyline(new float [][] {{xStart, yStart}, {xEnd, yEnd}});
+      float [] [] initialPoints;
+      if (this.joinPrefixPoints != null) {
+        // Prepend the absorbed polyline's own points (computed in enter())
+        // ahead of the point just clicked, so the two shapes become one
+        // continuous sequence of points instead of two disconnected ones.
+        initialPoints = new float [this.joinPrefixPoints.length + 2] [];
+        System.arraycopy(this.joinPrefixPoints, 0, initialPoints, 0, this.joinPrefixPoints.length);
+        initialPoints [this.joinPrefixPoints.length] = new float [] {xStart, yStart};
+        initialPoints [this.joinPrefixPoints.length + 1] = new float [] {xEnd, yEnd};
+      } else {
+        initialPoints =new float [][] {{xStart, yStart}, {xEnd, yEnd}};
+      }
+
+      Polyline newPolyline;
+      if (this.joinedPolyline != null) {
+        // Duplicate the absorbed polyline first so every one of its visual
+        // properties (thickness, color, dash pattern, arrows...) carries
+        // over to the extended shape, making it read as the very same
+        // polyline continued rather than a new one with default styling.
+        // Its points are then replaced by the combined sequence built above.
+        newPolyline = (Polyline)this.joinedPolyline.duplicate();
+        newPolyline.setPoints(initialPoints);
+        home.addPolyline(newPolyline);
+        // The absorbed polyline's geometry now lives entirely inside
+        // newPolyline: remove it from home so it doesn't linger as a
+        // separate, overlapping shape. Its index is kept so undo can put it
+        // back exactly where it was (see postCreateJoinedPolyline()).
+        this.joinedPolylineIndexAtDeletion = home.getPolylines().indexOf(this.joinedPolyline);
+        home.deletePolyline(this.joinedPolyline);
+      } else {
+        newPolyline = createPolyline(initialPoints);
+      }
       if (this.curvedPolyline) {
         newPolyline.setJoinStyle(Polyline.JoinStyle.CURVED);
       }
@@ -15681,6 +16072,17 @@ public class PlanController extends FurnitureController implements Controller {
         if (points.length < 2) {
           // Delete current created polyline if it doesn't have more than 2 clicked points
           home.deletePolyline(this.newPolyline);
+          if (this.joinedPolyline != null) {
+            // The merge is being discarded along with the rest of this
+            // unfinished polyline: restore the polyline it had absorbed.
+            home.addPolyline(this.joinedPolyline, this.joinedPolylineIndexAtDeletion);
+          }
+        } else if (this.joinedPolyline != null) {
+          // This polyline absorbed an existing open polyline at its first
+          // point: post a combined undoable edit so undo restores that
+          // polyline instead of leaving it permanently merged away.
+          postCreateJoinedPolyline(this.newPolyline, this.joinedPolyline, this.joinedPolylineIndexAtDeletion,
+              this.oldSelection, this.oldBasePlanLocked, this.oldAllLevelsSelection);
         } else {
           // Post polyline creation to undo support
           postCreatePolylines(Arrays.asList(new Polyline [] {this.newPolyline}),
@@ -15896,6 +16298,8 @@ public class PlanController extends FurnitureController implements Controller {
       this.newPolyline = null;
       this.newPoint = null;
       this.oldSelection = null;
+      this.joinedPolyline = null;
+      this.joinPrefixPoints = null;
     }
   }
 
