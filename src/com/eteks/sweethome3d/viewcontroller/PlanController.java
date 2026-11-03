@@ -169,6 +169,12 @@ public class PlanController extends FurnitureController implements Controller {
   private final ControllerState       roomNameOffsetState;
   private final ControllerState       roomNameRotationState;
   private final ControllerState       polylineCreationState;
+  // Holds a geometric snap point (endpoint / midpoint / intersection) found
+  // for the very first click of a new polyline, computed while still in
+  // PolylineCreationState. PolylineDrawingState.enter() consumes it (and
+  // clears it) as the polyline's initial point, since the raw mouse-press
+  // coordinates it would otherwise use are never snapped.
+  private float []                        nextPolylineStartPoint;
   private final ControllerState       polylineDrawingState;
   private final ControllerState       polylineResizeState;
   private final ControllerState       labelCreationState;
@@ -196,6 +202,7 @@ public class PlanController extends FurnitureController implements Controller {
   private Map<HomePieceOfFurniture, Area> furnitureSidesCache;
   private List<Selectable>                draggedItems;
   private boolean                         feedbackDisplayed = true;
+  private float []                        activeSnappedPoint     = null;
 
   /**
    * Creates the controller of plan view.
@@ -451,7 +458,10 @@ public class PlanController extends FurnitureController implements Controller {
   public void pressMouse(float x, float y, int clickCount, boolean shiftDown,
                          boolean alignmentActivated, boolean duplicationActivated, boolean magnetismToggled,
                          View.PointerType pointerType) {
-    // Store the last coordinates of a mouse press
+    // Store the last coordinates of a mouse press using RAW coordinates BEFORE
+    // overriding.
+    // This ensures accurate tracking of the physical mouse so the view can
+    // naturally break away from snaps.
     this.xLastMousePress = x;
     this.yLastMousePress = y;
     this.xLastMouseMove = x;
@@ -461,6 +471,14 @@ public class PlanController extends FurnitureController implements Controller {
     this.duplicationActivatedLastMousePress = duplicationActivated;
     this.magnetismToggledLastMousePress = magnetismToggled;
     this.pointerTypeLastMousePress = pointerType;
+
+    if (this.activeSnappedPoint != null) {
+      x = this.activeSnappedPoint [0];
+      y = this.activeSnappedPoint [1];
+      // Do NOT clear activeSnappedPoint here.
+      // It must persist so releaseMouse can use the identical coordinates.
+    }
+
     this.state.pressMouse(x, y, clickCount, shiftDown, duplicationActivated);
   }
 
@@ -468,16 +486,38 @@ public class PlanController extends FurnitureController implements Controller {
    * Processes a mouse button released event.
    */
   public void releaseMouse(float x, float y) {
+    if (this.activeSnappedPoint != null) {
+      x = this.activeSnappedPoint [0];
+      y = this.activeSnappedPoint [1];
+    }
+
     this.state.releaseMouse(x, y);
+
+    // DO NOT clear activeSnappedPoint here.
+    // Clearing it prematurely interrupts the continuous creation of polyline
+    // segments.
+    // Because xLastMouseMove now stores RAW physical coordinates, the View will
+    // naturally
+    // clear the snap point when the user moves the mouse away, eliminating the
+    // need to double-click.
   }
 
   /**
    * Processes a mouse button moved event.
    */
   public void moveMouse(float x, float y) {
-    // Store the last coordinates of a mouse move
+    // Store the raw coordinates BEFORE overriding with snap points.
+    // This allows external observers (like PlanView) to know the actual
+    // physical mouse position.
     this.xLastMouseMove = x;
     this.yLastMouseMove = y;
+
+    if (this.activeSnappedPoint != null) {
+      x = this.activeSnappedPoint [0];
+      y = this.activeSnappedPoint [1];
+    }
+
+    // Pass the snapped coordinates to the state
     this.state.moveMouse(x, y);
   }
 
@@ -14919,11 +14959,222 @@ public class PlanController extends FurnitureController implements Controller {
     }
   }
 
+  public enum SnapType {
+    ENDPOINT, MIDPOINT, INTERSECTION, PERPENDICULAR
+  }
+
+  private class SnapPoint {
+    public float    x;
+    public float    y;
+    public SnapType type;
+
+    public SnapPoint(float x, float y, SnapType type) {
+      this.x = x;
+      this.y = y;
+      this.type = type;
+    }
+  }
+
+  private SnapPoint getGeometricSnapPoint(float mouseX, float mouseY, float tolerance, Polyline activePolyline) {
+    return getGeometricSnapPoint(mouseX, mouseY, tolerance, activePolyline, null, null);
+  }
+  
+
+   /**
+   * Same as {@link #getGeometricSnapPoint(float, float, float, Polyline)}, but
+   * also tests for a perpendicular snap: if <code>fromX</code>,
+   * <code>fromY</code> is given (the start point of the segment currently being
+   * drawn or resized), this looks for the closest point among all polyline /
+   * wall / room / furniture edges at which a segment coming from
+   * (<code>fromX</code>, <code>fromY</code>) would be perpendicular to that edge.
+   * This lets a polyline segment snap so that it forms a right angle with an
+   * existing polyline, wall, room or furniture edge.
+   */
+  private SnapPoint getGeometricSnapPoint(float mouseX, float mouseY, float tolerance, Polyline activePolyline,
+                                          Float fromX, Float fromY) {
+    SnapPoint bestSnap = null;
+    float minDistance = tolerance;
+    float absoluteClosest = Float.MAX_VALUE;
+
+    // Gather the point geometry of every existing polyline (plus the polyline
+    // currently being drawn, if any), every visible wall at the selected level,
+    // every room at the selected level, and every piece of furniture at the
+    // selected level, so a polyline being drawn can snap to a room's corners,
+    // wall corners and wall edge midpoints, a furniture bounding box's corners
+    // and edge midpoints, and to intersections between polyline, wall, room and
+    // furniture edges, just as it already does against other polylines.
+    java.util.List<float [] []> allShapesPoints = new java.util.ArrayList<float [] []>();
+    java.util.List<Boolean> allShapesClosed = new java.util.ArrayList<Boolean>();
+
+    java.util.List<Polyline> allPolylines = new java.util.ArrayList<Polyline>(home.getPolylines());
+    if (activePolyline != null && !allPolylines.contains(activePolyline)) {
+      allPolylines.add(activePolyline);
+    }
+    for (Polyline polyline : allPolylines) {
+      allShapesPoints.add(polyline.getPoints());
+      allShapesClosed.add(polyline.isClosedPath());
+    }
+
+    for (Wall wall : home.getWalls()) {
+      if (isLevelNullOrViewable(wall.getLevel())
+          && wall.isAtLevel(home.getSelectedLevel())) {
+        // A wall is represented by its closed corner polygon.
+        allShapesPoints.add(wall.getPoints());
+        allShapesClosed.add(Boolean.TRUE);
+      }
+    }
+
+    for (Room room : getDetectableRoomsAtSelectedLevel()) {
+      // A room is always a closed polygon
+      allShapesPoints.add(room.getPoints());
+      allShapesClosed.add(Boolean.TRUE);
+    }
+    for (HomePieceOfFurniture piece : this.home.getFurniture()) {
+      if (isPieceOfFurnitureVisibleAtSelectedLevel(piece)) {
+        // A piece of furniture's bounding box is always a closed polygon
+        allShapesPoints.add(piece.getPoints());
+        allShapesClosed.add(Boolean.TRUE);
+      }
+    }
+
+    // Endpoints and midpoints
+    for (int s = 0; s < allShapesPoints.size(); s++) {
+      float [] [] points = allShapesPoints.get(s);
+      boolean closed = allShapesClosed.get(s);
+
+      for (int i = 0; i < points.length; i++) {
+        float distToEnd = (float)Point2D.distance(mouseX, mouseY, points [i] [0], points [i] [1]);
+        if (distToEnd < minDistance) {
+          minDistance = distToEnd;
+          bestSnap = new SnapPoint(points [i] [0], points [i] [1], SnapType.ENDPOINT);
+          if (distToEnd < absoluteClosest)
+            absoluteClosest = distToEnd;
+        }
+
+        if (i < points.length - 1 || closed) {
+          int nextIdx = (i + 1) % points.length;
+          float midX = (points [i] [0] + points [nextIdx] [0]) / 2f;
+          float midY = (points [i] [1] + points [nextIdx] [1]) / 2f;
+          float distToMid = (float)Point2D.distance(mouseX, mouseY, midX, midY);
+          if (distToMid < minDistance) {
+            minDistance = distToMid;
+            bestSnap = new SnapPoint(midX, midY, SnapType.MIDPOINT);
+          }
+        }
+      }
+    }
+
+    // Intersections between every pair of shape segments (polyline/polyline,
+    // polyline/wall, polyline/room, polyline/furniture, wall/wall,
+    // wall/room, wall/furniture, room/room, room/furniture and
+    // furniture/furniture)
+    for (int s1 = 0; s1 < allShapesPoints.size(); s1++) {
+      float [] [] points = allShapesPoints.get(s1);
+      boolean closed1 = allShapesClosed.get(s1);
+
+      for (int s2 = 0; s2 < allShapesPoints.size(); s2++) {
+        boolean isSameShape = (s1 == s2);
+        float [] [] otherPoints = allShapesPoints.get(s2);
+        boolean closed2 = allShapesClosed.get(s2);
+
+        for (int i = 0; i < points.length - (closed1
+            ? 0
+            : 1); i++) {
+          int nextI = (i + 1) % points.length;
+          float x1 = points [i] [0], y1 = points [i] [1];
+          float x2 = points [nextI] [0], y2 = points [nextI] [1];
+
+          for (int j = 0; j < otherPoints.length - (closed2
+              ? 0
+              : 1); j++) {
+            if (isSameShape && (i == j || Math.abs(i - j) == 1 || (closed1 && Math.abs(i - j) == points.length - 1))) {
+              continue;
+            }
+
+            int nextJ = (j + 1) % otherPoints.length;
+            float x3 = otherPoints [j] [0], y3 = otherPoints [j] [1];
+            float x4 = otherPoints [nextJ] [0], y4 = otherPoints [nextJ] [1];
+
+            float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            if (denominator != 0) {
+              float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+              float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+              if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                float intersectX = x1 + t * (x2 - x1);
+                float intersectY = y1 + t * (y2 - y1);
+                float distToIntersect = (float)Point2D.distance(mouseX, mouseY, intersectX, intersectY);
+                if (distToIntersect < minDistance) {
+                  minDistance = distToIntersect;
+                  bestSnap = new SnapPoint(intersectX, intersectY, SnapType.INTERSECTION);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Perpendicular: if a reference point (the start of the segment being
+    // drawn or resized) was given, look for the point on any edge (polyline,
+    // wall, room or furniture) at which a segment coming from that reference
+    // point would form a right angle with the edge. Only the foot of the
+    // perpendicular that falls within the edge's bounds is considered, and
+    // a degenerate foot that coincides with the reference point itself
+    // (i.e. the edge ending exactly at the reference point) is ignored.
+    if (fromX != null && fromY != null) {
+      for (int s = 0; s < allShapesPoints.size(); s++) {
+        float [] [] points = allShapesPoints.get(s);
+        boolean closed = allShapesClosed.get(s);
+        int pointCount = points.length;
+
+        for (int i = 0; i < pointCount - (closed
+            ? 0
+            : 1); i++) {
+          int nextI = (i + 1) % pointCount;
+          float x1 = points [i] [0], y1 = points [i] [1];
+          float x2 = points [nextI] [0], y2 = points [nextI] [1];
+
+          float dx = x2 - x1;
+          float dy = y2 - y1;
+          float edgeLengthSq = dx * dx + dy * dy;
+          if (edgeLengthSq == 0) {
+            continue;
+          }
+
+          float t = ((fromX - x1) * dx + (fromY - y1) * dy) / edgeLengthSq;
+          if (t < 0 || t > 1) {
+            // Foot of the perpendicular falls outside the edge segment
+            continue;
+          }
+
+          float footX = x1 + t * dx;
+          float footY = y1 + t * dy;
+          if ((float)Point2D.distance(fromX, fromY, footX, footY) < 0.001f) {
+            // Degenerate case: the edge ends right at the reference point
+            continue;
+          }
+
+          float distToFoot = (float)Point2D.distance(mouseX, mouseY, footX, footY);
+          if (distToFoot < minDistance) {
+            minDistance = distToFoot;
+            bestSnap = new SnapPoint(footX, footY, SnapType.PERPENDICULAR);
+          }
+        }
+      }
+    }
+
+    return bestSnap;
+  }
+
   /**
    * Polyline creation state. This state manages transition to
    * other modes, and initial polyline creation.
    */
   private class PolylineCreationState extends AbstractModeChangeState {
+
+    private SnapPoint hoveredSnapPoint;
+
     @Override
     public Mode getMode() {
       return Mode.POLYLINE_CREATION;
@@ -14932,11 +15183,76 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void enter() {
       getView().setCursor(PlanView.CursorType.DRAW);
+      this.hoveredSnapPoint = null;
+    }
+
+    @Override
+    public void moveMouse(float x, float y) {
+      // Hover logic to display AutoCAD style snap markers BEFORE the first
+      // click
+      PlanView planView = getView();
+      float snapTolerance = planView.getPixelLength() * 6f;
+
+      // Pass null because no polyline is actively being drawn yet
+      this.hoveredSnapPoint = getGeometricSnapPoint(x, y, snapTolerance, null);
+      {
+        // java.io.FileWriter fw = null;
+        // try {
+        // fw = new java.io.FileWriter(System.getProperty("user.home") +
+        // "/sh3d_debug.log", true);
+        // fw.write("hover-before-click: x=" + x + " y=" + y + " tolerance=" +
+        // snapTolerance
+        // + " result=" + (this.hoveredSnapPoint == null ? "null"
+        // : this.hoveredSnapPoint.type + "@(" + this.hoveredSnapPoint.x + "," +
+        // this.hoveredSnapPoint.y + ")")
+        // + " existingPolylineCount=" + home.getPolylines().size() + "\n");
+        // } catch (java.io.IOException ex) {
+        // // ignore, debug only
+        // } finally {
+        // if (fw != null) {
+        // try {
+        // fw.close();
+        // } catch (java.io.IOException ex) {
+        // // ignore, debug only
+        // }
+        // }
+        // }
+      }
+
+      if (this.hoveredSnapPoint != null) {
+        // Use the new dedicated snap feedback method
+        planView.setSnapFeedback(this.hoveredSnapPoint.type, this.hoveredSnapPoint.x, this.hoveredSnapPoint.y);
+      } else {
+        planView.setSnapFeedback(null, 0, 0); // Clear snap marker
+        planView.deleteFeedback();
+      }
     }
 
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Snap the very first point of the new polyline to a nearby endpoint,
+      // midpoint, or intersection of existing polylines, same as every
+      // subsequent point already does in PolylineDrawingState.moveMouse().
+      // The hover feedback in moveMouse() above only ever drew a marker; it
+      // never fed the snapped coordinates back into polyline creation, so
+      // the first click always used the raw, unsnapped mouse position.
+      boolean magnetismEnabled = preferences.isMagnetismEnabled() ^ wasMagnetismToggledLastMousePress();
+      SnapPoint snapPoint = null;
+      if (magnetismEnabled) {
+        if (this.hoveredSnapPoint != null) {
+          // Use cached snap point to prevent micro-movements during mouse press
+          // from breaking the snap
+          snapPoint = this.hoveredSnapPoint;
+        } else {
+          float snapTolerance = getView().getPixelLength() * 6f;
+          snapPoint = getGeometricSnapPoint(x, y, snapTolerance, null);
+        }
+      }
+      PlanController.this.nextPolylineStartPoint = snapPoint != null
+          ? new float [] {snapPoint.x, snapPoint.y}
+          : null;
+
       // Change state to PolylineDrawingState
       setState(getPolylineDrawingState());
     }
@@ -15064,6 +15380,7 @@ public class PlanController extends FurnitureController implements Controller {
     private boolean          alignmentActivated;
     private boolean          curvedPolyline;
     private long             lastPointCreationTime;
+    private SnapPoint        hoveredSnapPoint;
 
     @Override
     public Mode getMode() {
@@ -15106,10 +15423,32 @@ public class PlanController extends FurnitureController implements Controller {
       this.oldBasePlanLocked = home.isBasePlanLocked();
       this.oldAllLevelsSelection = home.isAllLevelsSelection();
       this.newPolyline = null;
+      this.hoveredSnapPoint = null;
       this.alignmentActivated = wasAlignmentActivatedLastMousePress();
       toggleMagnetism(wasMagnetismToggledLastMousePress());
+
+      if (PlanController.this.nextPolylineStartPoint != null) {
+        // Use the geometric snap point computed for the first click in
+        // PolylineCreationState instead of the raw mouse-press coordinates.
+        this.xPreviousPoint = PlanController.this.nextPolylineStartPoint [0];
+        this.yPreviousPoint = PlanController.this.nextPolylineStartPoint [1];
+        PlanController.this.nextPolylineStartPoint = null;
+      } else {
       this.xPreviousPoint = getXLastMousePress();
       this.yPreviousPoint = getYLastMousePress();
+
+        // FIX: Guarantee the first point snaps even if the cached point was
+        // dropped during state transition
+        if (this.magnetismEnabled) {
+          float snapTolerance = getView().getPixelLength() * 6f;
+          SnapPoint snapPoint = getGeometricSnapPoint(this.xPreviousPoint, this.yPreviousPoint, snapTolerance, null);
+          if (snapPoint != null) {
+            this.xPreviousPoint = snapPoint.x;
+            this.yPreviousPoint = snapPoint.y;
+          }
+        }
+      }
+
       setDuplicationActivated(wasDuplicationActivatedLastMousePress());
       deselectAll();
     }
@@ -15117,15 +15456,76 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void moveMouse(float x, float y) {
       PlanView planView = getView();
-      // Compute the coordinates where current edit polyline point should be moved
+
+      // FIX: If starting a new segment (newPoint != null), update previous
+      // point
+      // so angle magnetism correctly starts from the newly snapped location.
+      if (this.newPolyline != null && this.newPoint != null) {
+        float [] [] points = this.newPolyline.getPoints();
+        this.xPreviousPoint = points [points.length - 1] [0];
+        this.yPreviousPoint = points [points.length - 1] [1];
+      }
       float xEnd = x;
       float yEnd = y;
+      SnapPoint snapPoint = null;
+
+      // 1. Standard Angle Magnetism
       if (this.alignmentActivated
           || this.magnetismEnabled) {
         PointWithAngleMagnetism pointWithAngleMagnetism = new PointWithAngleMagnetism(
             this.xPreviousPoint, this.yPreviousPoint, x, y, preferences.getLengthUnit(), planView.getPixelLength());
         xEnd = pointWithAngleMagnetism.getX();
         yEnd = pointWithAngleMagnetism.getY();
+      }
+
+      // 3. Always detect geometric snap targets for visual feedback.
+      // Magnetism only controls whether the endpoint actually snaps.
+      float snapTolerance = planView.getPixelLength() * 6f;
+
+      // FIX: Temporarily collapse the actively drawn point to the segment start
+      // so getGeometricSnapPoint doesn't continuously self-snap to the moving
+      // tail (preventing movement).
+      // ONLY collapse if we are actively dragging a point (newPoint == null),
+      // otherwise it destroys the previous snapped point!
+ if (this.newPolyline != null && this.newPoint == null) { this.newPolyline.setPoint(
+        this.xPreviousPoint, this.yPreviousPoint, this.newPolyline.getPointCount() - 1);
+      }
+
+      // Pass null instead of this.newPolyline to ensure snap INDICATOR shows
+      // for ALL points in the current polyline
+      // Pass this.xPreviousPoint/yPreviousPoint as the perpendicular reference
+      // so this segment can also
+      // snap perpendicular to a nearby polyline, room, or furniture edge.
+      snapPoint = getGeometricSnapPoint(x, y, snapTolerance, null, this.xPreviousPoint,
+        this.yPreviousPoint);
+      this.hoveredSnapPoint = snapPoint; // Cache the snap point for pressMouse
+                                         // to prevent micro-movements
+      {
+        // java.io.FileWriter fw = null;
+        // try {
+        // fw = new java.io.FileWriter(System.getProperty("user.home") +
+        // "/sh3d_debug.log", true);
+        // fw.write("active-drawing: x=" + x + " y=" + y + " tolerance=" +
+        // snapTolerance
+        // + " result=" + (snapPoint == null ? "null" : snapPoint.type + "@(" +
+        // snapPoint.x + "," + snapPoint.y + ")")
+        // + " magnetismEnabled=" + this.magnetismEnabled + "\n");
+        // } catch (java.io.IOException ex) {
+        // // ignore, debug only
+        // } finally {
+        // if (fw != null) {
+        // try {
+        // fw.close();
+        // } catch (java.io.IOException ex) {
+        // // ignore, debug only
+        // }
+        // }
+        // }
+      }
+
+      if (this.magnetismEnabled && snapPoint != null) {
+        xEnd = snapPoint.x;
+        yEnd = snapPoint.y;
       }
 
       // If current polyline doesn't exist
@@ -15145,17 +15545,33 @@ public class PlanController extends FurnitureController implements Controller {
         // Otherwise update its last point
         this.newPolyline.setPoint(xEnd, yEnd, this.newPolyline.getPointCount() - 1);
       }
+
+      // Always show snap indicator if a valid snap point is found
+      if (snapPoint != null) {
+        planView.setSnapFeedback(snapPoint.type, snapPoint.x, snapPoint.y);
+      } else {
+        planView.setSnapFeedback(null, 0, 0);
+      }
+
       if (feedbackDisplayed) {
-        planView.setAlignmentFeedback(Polyline.class, null, x, y, false);
+        // Visual alignment feedback must be read-only: it must never change
+        // the active segment state or its snap point. Pass the exact endpoint
+        // already written into the active polyline.
+        float [] [] feedbackPoints = this.newPolyline.getPoints();
+        float feedbackX = feedbackPoints[feedbackPoints.length - 1][0];
+        float feedbackY = feedbackPoints[feedbackPoints.length - 1][1];
+
+        planView.setAlignmentFeedback(Polyline.class, this.newPolyline, feedbackX, feedbackY, false);
         planView.setToolTipFeedback(
-            getToolTipFeedbackText(this.newPolyline, this.newPolyline.getPointCount() - 1), x, y);
+            getToolTipFeedbackText(this.newPolyline, this.newPolyline.getPointCount() - 1),
+            feedbackX, feedbackY);
         if (this.newPolyline.getJoinStyle() != Polyline.JoinStyle.CURVED) {
           showPolylineAngleFeedback(this.newPolyline, this.newPolyline.getPointCount() - 1);
         }
       }
 
       // Ensure point at (x,y) is visible
-      planView.makePointVisible(x, y);
+      planView.makePointVisible(xEnd, yEnd);
     }
 
     /**
@@ -15176,6 +15592,69 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Use cached snap point to prevent micro-movements during mouse press
+      // from breaking the single-click snap
+      boolean activeMagnetism = preferences.isMagnetismEnabled() ^ wasMagnetismToggledLastMousePress();
+      if (this.newPolyline != null) {
+        if (activeMagnetism && this.hoveredSnapPoint != null) {
+          // Reuse exactly the snap point displayed during the last mouse move.
+          // Do not recompute here: a repaint/alignment marker must never make
+          // two successive clicks resolve to different endpoints.
+          this.newPolyline.setPoint(this.hoveredSnapPoint.x, this.hoveredSnapPoint.y,
+              this.newPolyline.getPointCount() - 1);
+        }
+
+        // SHIFT + ENDPOINT SNAP => explicit closing point.
+        // Holding Shift while the point currently snapped onto is an
+        // ENDPOINT that coincides with this polyline's own start point is
+        // treated the same way double-clicking on the start point already
+        // does a few lines below: the path is closed instead of appending a
+        // duplicate, (almost) coincident last vertex. This gives a one-click
+        // way to close a shape without needing a double-click, while still
+        // producing exactly the same clean geometry.
+        //
+        // Why dropping that duplicate last point matters for thickness:
+        // ShapeTools.getPolylineShape() and the BasicStroke used to paint a
+        // polyline (see PlanComponent.paintPolylines()) only compute a
+        // single, correctly mitered corner at the seam between the last and
+        // first vertices of a *single* closed sub-path. If the redundant,
+        // (almost) coincident point produced by snapping back onto the
+        // start point were left in place, the closed shape would instead
+        // have a near-zero-length final segment sitting right at the seam;
+        // once stroked at the polyline's thickness, Java2D's join
+        // computation for that degenerate segment can leave a visible notch
+        // or a small overlapping sliver right at the closure - a defect
+        // that is barely noticeable on a thin polyline but becomes obvious
+        // on a thick one. Removing the point first, exactly as the existing
+        // double-click handler already does, guarantees the miter/bevel/
+        // round join configured by the polyline's own join style is
+        // computed from the real, final segment - not a degenerate one -
+        // and so closes cleanly whatever the polyline's thickness.
+        if (shiftDown && activeMagnetism && this.hoveredSnapPoint != null
+            && this.hoveredSnapPoint.type == SnapType.ENDPOINT && this.newPolyline.getPointCount() > 2) {
+          float [] [] currentPoints = this.newPolyline.getPoints();
+          float [] startPoint = currentPoints [0];
+          if (Math.abs(this.hoveredSnapPoint.x - startPoint [0]) < 0.001f
+              && Math.abs(this.hoveredSnapPoint.y - startPoint [1]) < 0.001f) {
+            // Drop the currently dragged last point: once snapped it sits on
+            // (or acceptably close to) the start point, so keeping it around
+            // would only leave that degenerate closing segment described
+            // above once closedPath is turned on.
+            this.newPolyline.removePoint(this.newPolyline.getPointCount() - 1);
+            // Mark this polyline as an explicitly closed shape. The join
+            // style already configured on this polyline (MITER by default,
+            // or BEVEL / ROUND / CURVED if the user picked one) is left
+            // untouched and reused for the new closing seam, exactly as it
+            // is for every other corner of the shape, so the closing corner
+            // matches the rest of the outline instead of looking different
+            // from it.
+            this.newPolyline.setClosedPath(true);
+            validateDrawnPolyline();
+            return;
+          }
+        }
+      }
+
       if (clickCount == 2) {
         if (this.newPolyline != null) {
           int pointIndex = this.newPolyline.getPointIndexAt(x, y, getSelectionMargin());
@@ -15481,8 +15960,7 @@ public class PlanController extends FurnitureController implements Controller {
       PlanView planView = getView();
       float newX = x - this.deltaXToResizePoint;
       float newY = y - this.deltaYToResizePoint;
-      if (this.alignmentActivated
-          || this.magnetismEnabled) {
+      SnapPoint snapPoint = null;
         float [][] polylinePoints = this.selectedPolyline.getPoints();
         int previousPointIndex = this.polylinePointIndex == 0
             ? (this.selectedPolyline.isClosedPath()
@@ -15491,21 +15969,53 @@ public class PlanController extends FurnitureController implements Controller {
             : this.polylinePointIndex - 1;
         float xPreviousPoint = polylinePoints [previousPointIndex][0];
         float yPreviousPoint = polylinePoints [previousPointIndex][1];
+
+      if (this.alignmentActivated || this.magnetismEnabled) {
         PointWithAngleMagnetism pointWithAngleMagnetism = new PointWithAngleMagnetism(
             xPreviousPoint, yPreviousPoint, newX, newY, preferences.getLengthUnit(), planView.getPixelLength());
         newX = pointWithAngleMagnetism.getX();
         newY = pointWithAngleMagnetism.getY();
       }
+
+      // Always detect geometric snap targets for visual feedback.
+      // Magnetism only controls whether the resized point actually snaps.
+      float snapTolerance = planView.getPixelLength() * 6f;
+
+      // FIX: Temporarily move the resized point back to its original fixed
+      // position
+      // so getGeometricSnapPoint doesn't self-snap to the moving mouse cursor.
+      this.selectedPolyline.setPoint(this.oldX, this.oldY, this.polylinePointIndex);
+
+      // Pass null instead of this.selectedPolyline to ensure snap INDICATOR
+      // shows for ALL points in the current polyline
+      // Pass the resized point's neighbor as the perpendicular reference so
+      // this segment can also
+      // snap perpendicular to a nearby polyline, room, or furniture edge.
+      snapPoint = getGeometricSnapPoint(x, y, snapTolerance, null, xPreviousPoint, yPreviousPoint);
+
+      if (this.magnetismEnabled && snapPoint != null) {
+        newX = snapPoint.x;
+        newY = snapPoint.y;
+      }
+
+      // Restore/Update the resized point to its new snapped position
       this.selectedPolyline.setPoint(newX, newY, this.polylinePointIndex);
 
+      // Always show snap indicator if a valid snap point is found
+      if (snapPoint != null) {
+        planView.setSnapFeedback(snapPoint.type, snapPoint.x, snapPoint.y);
+      } else {
+        planView.setSnapFeedback(null, 0, 0);
+      }
+
       if (feedbackDisplayed) {
-        planView.setToolTipFeedback(getToolTipFeedbackText(this.selectedPolyline, this.polylinePointIndex), x, y);
+        planView.setToolTipFeedback(getToolTipFeedbackText(this.selectedPolyline, this.polylinePointIndex), newX, newY);
         if (this.selectedPolyline.getJoinStyle() != Polyline.JoinStyle.CURVED) {
           showPolylineAngleFeedback(this.selectedPolyline, this.polylinePointIndex);
         }
       }
       // Ensure point at (x,y) is visible
-      planView.makePointVisible(x, y);
+      planView.makePointVisible(newX, newY);
     }
 
     @Override

@@ -299,6 +299,10 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
   private JWindow               toolTipWindow;
   private boolean               resizeIndicatorVisible;
 
+  private PlanController.SnapType                                              snapFeedbackType;
+  private float                                                                snapFeedbackX;
+  private float                                                                snapFeedbackY;
+
   private Map<PlanController.EditableProperty, JFormattedTextField> toolTipEditableTextFields;
   private KeyListener                       toolTipKeyListener;
   private KeyEventPostProcessor             windowsAltPostProcessor;
@@ -1234,6 +1238,18 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     this.doorOrWindowWallThicknessAreasCache = null;
     this.sortedLevelRooms = null;
     this.sortedLevelFurniture = null;
+  }
+
+  /**
+   * Sets the snap feedback coordinates.
+   */
+  public void setSnapFeedback(PlanController.SnapType snapType, float x, float y) {
+
+    this.snapFeedbackType = snapType;
+    this.snapFeedbackX = x;
+    this.snapFeedbackY = y;
+
+    repaint();
   }
 
   /**
@@ -2481,11 +2497,71 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     g2D.scale(scale, scale);
     setRenderingHints(g2D);
     try {
-      paintContent(g2D, this.home.getSelectedLevel(), getScale(), PaintMode.PAINT);
+      paintContent(g2D, this.home.getSelectedLevel(), scale, PaintMode.PAINT);
     } catch (InterruptedIOException ex) {
       // Ignore exception because it may happen only in EXPORT paint mode
     }
+
+    paintSnapFeedback(g2D);
     g2D.dispose();
+  }
+
+  /**
+   * Paints the visual snap marker over the plan, supporting all items including
+   * polylines, walls, and dimension lines.
+   */
+  private void paintSnapFeedback(Graphics2D g2D) {
+    if (this.snapFeedbackType != null) {
+      float scale = getScale() * this.resolutionScale;
+      if (scale <= 0)
+        return; // Prevent divide-by-zero or negative scaling
+      float markerSize = 10f / scale;
+      float offset = markerSize / 2f;
+      float x = this.snapFeedbackX;
+      float y = this.snapFeedbackY;
+      // Use a consistent color and stroke for snap indicators (e.g., Red or a
+      // high-contrast color)
+      g2D.setColor(Color.RED);
+      g2D.setStroke(new BasicStroke(1.5f / scale));
+      switch (this.snapFeedbackType) {
+        case ENDPOINT:
+          // Draw a square for endpoints (corners of walls, ends of
+          // polylines/dimension lines)
+          g2D.draw(new java.awt.geom.Rectangle2D.Float(x - offset, y - offset, markerSize, markerSize));
+          break;
+        case MIDPOINT:
+          // Draw a triangle for midpoints
+          java.awt.geom.Path2D.Float triangle = new java.awt.geom.Path2D.Float();
+          triangle.moveTo(x, y - offset);
+          triangle.lineTo(x + offset, y + offset);
+          triangle.lineTo(x - offset, y + offset);
+          triangle.closePath();
+          g2D.draw(triangle);
+          break;
+        case INTERSECTION:
+          // Draw an 'X' for intersections
+          g2D.draw(new java.awt.geom.Line2D.Float(x - offset, y - offset, x + offset, y + offset));
+          g2D.draw(new java.awt.geom.Line2D.Float(x - offset, y + offset, x + offset, y - offset));
+          break;
+        case PERPENDICULAR:
+          // Draw the classic CAD "right angle" glyph: an upside-down T (a
+          // horizontal bar with a vertical tick dropping from its middle),
+          // universally used to indicate a perpendicular snap.
+          // Sized 2x the other markers for extra visibility.
+          float perpOffset = offset * 2f;
+          g2D.draw(new java.awt.geom.Line2D.Float(x - perpOffset, y + perpOffset, x + perpOffset, y + perpOffset));
+          g2D.draw(new java.awt.geom.Line2D.Float(x, y + perpOffset, x, y - perpOffset));
+          // Small square at the foot of the tick marks the actual right angle
+          float cornerSize = perpOffset / 2f;
+          g2D.draw(
+              new java.awt.geom.Rectangle2D.Float(x - cornerSize, y + perpOffset - cornerSize, cornerSize, cornerSize));
+          break;
+        default:
+          // Draw a circle as the fallback/default snap marker
+          g2D.draw(new java.awt.geom.Ellipse2D.Float(x - offset, y - offset, markerSize, markerSize));
+          break;
+      }
+    }
   }
 
   /**
@@ -6876,7 +6952,8 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
         || this.locationFeeback != null
         || this.centerAngleFeedback != null
         || this.draggedItemsFeedback != null
-        || this.dimensionLinesFeedback != null;
+        || this.dimensionLinesFeedback != null
+        || this.snapFeedbackType != null;
     this.rectangleFeedback = null;
 
     this.alignedObjectClass = null;
@@ -6890,6 +6967,10 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     this.draggedItemsFeedback = null;
 
     this.dimensionLinesFeedback = null;
+    // Clear geometric snap marker feedback too.
+    this.snapFeedbackType = null;
+    this.snapFeedbackX = 0;
+    this.snapFeedbackY = 0;
     if (feedbackPainted) {
       repaint();
     }
