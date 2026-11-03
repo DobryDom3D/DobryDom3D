@@ -756,6 +756,86 @@ public class Polyline extends HomeObject implements Selectable, Elevatable {
       updatePoints(points);
     }
   }
+  
+  /**
+/**
+   * Returns the points of the polygon matching this polyline, along with midpoints,
+   * curve interpolations, and the centroid (if closed) to match snap marker 
+   * behaviors for dimensions and walls.
+   */
+  public float [][] getSnapPoints() {
+    int pointCount = this.points.length;
+    if (pointCount < 2) {
+      return deepCopy(this.points);
+    }
+    
+    // Calculate size: Base points + midpoints of each segment + optional centroid
+    int segmentCount = this.closedPath ? pointCount : pointCount - 1;
+    int totalSnapPoints = pointCount + segmentCount + (this.closedPath ? 1 : 0);
+    float[][] snapPoints = new float[totalSnapPoints][2];
+    
+    int index = 0;
+    float centroidX = 0f;
+    float centroidY = 0f;
+    float signedArea = 0f;
+
+    for (int i = 0; i < pointCount; i++) {
+      // 1. Add the standard endpoint/vertex
+      snapPoints[index++] = this.points[i].clone();
+      
+      // 2. Calculate and add the midpoint of the current segment
+      if (i < pointCount - 1 || this.closedPath) {
+        float[] point = this.points[i];
+        float[] nextPoint = this.points[(i + 1) % pointCount];
+        
+        // Accumulate area and centroid data if this is a closed polygon
+        if (this.closedPath) {
+            float a = point[0] * nextPoint[1] - nextPoint[0] * point[1];
+            signedArea += a;
+            centroidX += (point[0] + nextPoint[0]) * a;
+            centroidY += (point[1] + nextPoint[1]) * a;
+        }
+
+        if (this.joinStyle == JoinStyle.CURVED) {
+          // Calculate the midpoint on the cubic curve segment (t = 0.5)
+          float[] previousPoint = this.points[i == 0 ? pointCount - 1 : i - 1];
+          float[] nextNextPoint = this.points[(i + 2) % pointCount];
+          
+          float[] vectorToBisectorPoint = new float[] {nextPoint[0] - previousPoint[0], nextPoint[1] - previousPoint[1]};
+          float[] vectorToBisectorNextPoint = new float[] {point[0] - nextNextPoint[0], point[1] - nextNextPoint[1]};
+          
+          float ctrl1X = point[0] + (i != 0 || this.closedPath ? vectorToBisectorPoint[0] / 3.625f : 0);
+          float ctrl1Y = point[1] + (i != 0 || this.closedPath ? vectorToBisectorPoint[1] / 3.625f : 0);
+          float ctrl2X = nextPoint[0] + (i != pointCount - 2 || this.closedPath ? vectorToBisectorNextPoint[0] / 3.625f : 0);
+          float ctrl2Y = nextPoint[1] + (i != pointCount - 2 || this.closedPath ? vectorToBisectorNextPoint[1] / 3.625f : 0);
+          
+          // Cubic Bezier midpoint interpolation for t = 0.5
+          float t = 0.5f;
+          float mt = 1f - t;
+          float midX = (mt * mt * mt * point[0]) + (3f * mt * mt * t * ctrl1X) + (3f * mt * t * t * ctrl2X) + (t * t * t * nextPoint[0]);
+          float midY = (mt * mt * mt * point[1]) + (3f * mt * mt * t * ctrl1Y) + (3f * mt * t * t * ctrl2Y) + (t * t * t * nextPoint[1]);
+          
+          snapPoints[index++] = new float[] {midX, midY};
+        } else {
+          // Calculate straight segment midpoint
+          snapPoints[index++] = new float[] {
+            (point[0] + nextPoint[0]) / 2f,
+            (point[1] + nextPoint[1]) / 2f
+          };
+        }
+      }
+    }
+    
+    // 3. Add centroid for closed shapes to allow center-snapping (like rooms/closed walls)
+    if (this.closedPath && signedArea != 0) {
+        signedArea *= 0.5f;
+        centroidX = centroidX / (6f * signedArea);
+        centroidY = centroidY / (6f * signedArea);
+        snapPoints[index++] = new float[] {centroidX, centroidY};
+    }
+    
+    return snapPoints;
+  }
 
   /**
    * Returns a clone of this polyline.
