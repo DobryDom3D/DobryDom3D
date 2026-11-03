@@ -104,7 +104,7 @@ public class PolylinePanel extends JPanel implements DialogView {
     this.thicknessLabel = new JLabel(SwingTools.getLocalizedLabelText(preferences,
         PolylinePanel.class, "thicknessLabel.text", preferences.getLengthUnit().getName()));
     final NullableSpinner.NullableSpinnerLengthModel thicknessSpinnerModel =
-        new NullableSpinner.NullableSpinnerLengthModel(preferences, preferences.getLengthUnit().getMinimumLength(), 50f);
+        new NullableSpinner.NullableSpinnerLengthModel(preferences, preferences.getLengthUnit().getMinimumLength(), 500f);
     this.thicknessSpinner = new NullableSpinner(thicknessSpinnerModel);
     thicknessSpinnerModel.setNullable(controller.getThickness() == null);
     thicknessSpinnerModel.setLength(controller.getThickness());
