@@ -420,6 +420,9 @@ public class PhotoPanel extends JPanel implements DialogView {
             case FISHEYE :
               displayedValue = preferences.getLocalizedString(PhotoPanel.class, "lensComboBox.fisheyeLens.text");
               break;
+            case ORTHOGRAPHIC :
+              displayedValue = preferences.getLocalizedString(PhotoPanel.class, "lensComboBox.orthographicLens.text");
+              break;
             case PINHOLE :
             default :
               displayedValue = preferences.getLocalizedString(PhotoPanel.class, "lensComboBox.pinholeLens.text");
