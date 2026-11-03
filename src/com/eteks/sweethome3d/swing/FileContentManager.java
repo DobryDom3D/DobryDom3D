@@ -219,36 +219,27 @@ public class FileContentManager implements ContentManager {
   private static final String BMP_EXTENSION = ".bmp";
   private static final String WBMP_EXTENSION = ".wbmp";
   private static final String GIF_EXTENSION = ".gif";
+  private static final String JPEG_EXTENSION2 = ".jpeg";
   private static final FileFilter [] IMAGE_FILTERS = {
       new FileFilter() {
         @Override
         public boolean accept(File file) {
-          // Accept directories and .bmp files
+          // Accept directories and supported image files
+          String fileName = file.getName().toLowerCase();
           return file.isDirectory()
-                 || file.getName().toLowerCase().endsWith(BMP_EXTENSION)
-                 || file.getName().toLowerCase().endsWith(WBMP_EXTENSION);
+                 || fileName.endsWith(BMP_EXTENSION)
+                 || fileName.endsWith(WBMP_EXTENSION)
+                 || fileName.endsWith(GIF_EXTENSION)
+                 || fileName.endsWith(JPEG_EXTENSION)
+                 || fileName.endsWith(JPEG_EXTENSION2)
+                 || fileName.endsWith(PNG_EXTENSION);
         }
 
         @Override
         public String getDescription() {
-          return "BMP";
+          return "Images (BMP, WBMP, GIF, JPG, JPEG, PNG)";
         }
-      },
-      new FileFilter() {
-        @Override
-        public boolean accept(File file) {
-          // Accept directories and GIF files
-          return file.isDirectory()
-                 || file.getName().toLowerCase().endsWith(GIF_EXTENSION);
-        }
-
-        @Override
-        public String getDescription() {
-          return "GIF";
-        }
-      },
-      JPEG_FILTER [0],
-      PNG_FILTER [0]};
+      }};
   private static final String MOV_EXTENSION = ".mov";
   /**
    * Supported MOV filter.
@@ -473,7 +464,7 @@ public class FileContentManager implements ContentManager {
     this.fileExtensions.put(ContentType.MODEL,
         new String [] {OBJ_EXTENSION, LWS_EXTENSION, THREEDS_EXTENSION, DAE_EXTENSION, ZIP_EXTENSION, KMZ_EXTENSION});
     this.fileExtensions.put(ContentType.IMAGE,
-        new String [] {PNG_EXTENSION, JPEG_EXTENSION, BMP_EXTENSION, WBMP_EXTENSION, GIF_EXTENSION} );
+        new String [] {PNG_EXTENSION, JPEG_EXTENSION, JPEG_EXTENSION2, BMP_EXTENSION, WBMP_EXTENSION, GIF_EXTENSION} );
   }
 
   /**
@@ -875,9 +866,14 @@ public class FileContentManager implements ContentManager {
       fileChooser.setSelectedFile(new File(path));
     }
     // Set supported files filter
-    FileFilter acceptAllFileFilter = fileChooser.getAcceptAllFileFilter();
-    fileChooser.addChoosableFileFilter(acceptAllFileFilter);
     FileFilter [] contentFileFilters = getFileFilter(contentType);
+    if (contentType == ContentType.IMAGE) {
+      // Do not allow "All Files" when selecting an image
+      fileChooser.setAcceptAllFileFilterUsed(false);
+    } else {
+      FileFilter acceptAllFileFilter = fileChooser.getAcceptAllFileFilter();
+    fileChooser.addChoosableFileFilter(acceptAllFileFilter);
+    }
     for (FileFilter filter : contentFileFilters) {
       fileChooser.addChoosableFileFilter(filter);
     }
@@ -885,7 +881,7 @@ public class FileContentManager implements ContentManager {
     if (contentFileFilters.length == 1) {
       fileChooser.setFileFilter(contentFileFilters [0]);
     } else {
-      fileChooser.setFileFilter(acceptAllFileFilter);
+      fileChooser.setFileFilter(fileChooser.getAcceptAllFileFilter());
     }
     int option;
     if (isDirectory(contentType)) {
