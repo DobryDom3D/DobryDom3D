@@ -940,7 +940,7 @@ public class HomeFurniturePanel extends JPanel implements DialogView {
       this.lightPowerLabel = new JLabel(SwingTools.getLocalizedLabelText(preferences, HomeFurniturePanel.class,
           "lightPowerLabel.text", "%"));
       final NullableSpinner.NullableSpinnerNumberModel lightPowerSpinnerModel =
-          new NullableSpinner.NullableSpinnerNumberModel(0f, 0f, 100f, 5f) {
+          new NullableSpinner.NullableSpinnerNumberModel(0f, 0f, 1000f, 5f) {
             @Override
             Format getFormat() {
               return new DecimalFormat("0.#");
