@@ -175,6 +175,26 @@ public class PlanController extends FurnitureController implements Controller {
   // clears it) as the polyline's initial point, since the raw mouse-press
   // coordinates it would otherwise use are never snapped.
   private float []                        nextPolylineStartPoint;
+  // Holds a firm polyline-intersection snap point found for the very first
+  // click of a new room, computed while still in RoomCreationState.
+  // RoomDrawingState.enter() consumes it (and clears it) as the room's
+  // initial point, mirroring nextPolylineStartPoint above so the first
+  // point of a room snaps exactly like every point placed after it,
+  // instead of the state transition recomputing (and potentially losing)
+  // the snap from slightly different mouse coordinates.
+  private float []                        nextRoomStartPoint;
+  // Holds a firm geometric snap point (polyline or room endpoint, midpoint,
+  // intersection, or perpendicular projection) found for the very first
+  // click of a new wall, computed while still in WallCreationState.
+  // WallDrawingState.enter() consumes it (and clears it) as the wall's
+  // initial point - unless an existing wall's free start or end point is
+  // closer, in which case that takes precedence, exactly as it already
+  // did before this field existed - mirroring nextPolylineStartPoint and
+  // nextRoomStartPoint above so the first point of a wall snaps firmly
+  // onto a polyline or room point exactly like every point placed after
+  // it, instead of the state transition recomputing (and potentially
+  // losing) the snap from slightly different mouse coordinates.
+  private float []                        nextWallStartPoint;
   private final ControllerState       polylineDrawingState;
   private final ControllerState       polylineResizeState;
   private final ControllerState       labelCreationState;
@@ -5066,6 +5086,26 @@ public class PlanController extends FurnitureController implements Controller {
   }
 
   /**
+   * Returns the tolerance margin used to magnetize a room point or a moved
+   * piece of furniture onto a polyline (its endpoints, segment midpoints,
+   * perpendicular projections, and segment intersections). This is
+   * deliberately more generous than {@link #getSelectionMargin()} - which is
+   * tuned for the very fine-grained, already-tight wall-corner and
+   * room-corner magnetism - because a polyline typically has far fewer
+   * candidate points nearby than a dense wall network does, so a matching
+   * tight margin makes a polyline effectively very hard to hit with the
+   * mouse. Touch input gets an even larger margin, matching the same
+   * fat-finger accommodation {@link #getSelectionMargin()} already makes.
+   */
+  private float getPolylineMagnetismMargin() {
+    float indicatorPixelMargin = 3 * PIXEL_MARGIN;
+    if (getPointerTypeLastMousePress() == View.PointerType.TOUCH) {
+      indicatorPixelMargin *= 2;
+    }
+    return indicatorPixelMargin / getScale();
+  }
+
+  /**
    * Returns the selected item at (<code>x</code>, <code>y</code>) point.
    */
   private boolean isItemSelectedAt(float x, float y) {
@@ -9247,7 +9287,454 @@ public class PlanController extends FurnitureController implements Controller {
   }
 
   /**
-   * A point which coordinates are equal to the closest point of a wall or a room.
+   * Computes the intersection point of segment (<code>x1</code>,
+   * <code>y1</code>)-(<code>x2</code>, <code>y2</code>) with segment
+   * (<code>x3</code>, <code>y3</code>)-(<code>x4</code>, <code>y4</code>), or
+   * returns <code>null</code> if the two segments are parallel or don't
+   * actually intersect within their own bounds (a theoretical intersection of
+   * the infinite lines that support them doesn't count if it falls outside of
+   * either physical segment).
+   */
+  private static float [] computeSegmentsIntersection(float x1, float y1, float x2, float y2, float x3, float y3,
+                                                       float x4, float y4) {
+    float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (denominator == 0) {
+      // Parallel (or coincident) segments: no single intersection point
+      return null;
+    }
+    float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+    float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      return new float [] {x1 + t * (x2 - x1), y1 + t * (y2 - y1)};
+    }
+    return null;
+  }
+
+  /**
+   * A small immutable holder for the coordinates of a point found by
+   * {@link #findClosestPolylinePoint(float, float, double, Polyline)}
+   * together with its squared distance to the point that was searched, so
+   * callers can directly compare it against other magnetism candidates
+   * (wall corners, room corners...) without recomputing the distance.
+   */
+  private static final class ClosestPointResult {
+    private final float  x;
+    private final float  y;
+    private final double distanceSq;
+
+    private ClosestPointResult(float x, float y, double distanceSq) {
+      this.x = x;
+      this.y = y;
+      this.distanceSq = distanceSq;
+    }
+  }
+
+  /**
+   * Returns the closest point among every existing polyline's vertices
+   * (endpoints), segment midpoints, perpendicular projections of
+   * (<code>x</code>, <code>y</code>) onto a segment, and intersections
+   * between two polyline segments, provided that point lies within
+   * <code>maxDistanceSq</code> (a squared distance, expressed in the same
+   * unit as the plan) of (<code>x</code>, <code>y</code>). Returns
+   * <code>null</code> if no polyline point is close enough. This lets other
+   * items - rooms and furniture in particular - magnetize onto a polyline the
+   * same way they already magnetize onto walls and other rooms.
+   *
+   * @param excludedPolyline a polyline to ignore while searching (typically
+   *                         the polyline currently being edited), or
+   *                         <code>null</code> to consider every polyline of
+   *                         the home.
+   */
+  private ClosestPointResult findClosestPolylinePoint(float x, float y, double maxDistanceSq,
+                                                       Polyline excludedPolyline) {
+    double smallestDistanceSq = maxDistanceSq;
+    float  closestX = 0;
+    float  closestY = 0;
+    boolean found = false;
+
+    List<Polyline> polylines = this.home.getPolylines();
+    // 1. Vertices (endpoints), segment midpoints, and perpendicular
+    // projections of (x, y) onto each segment
+    for (Polyline polyline : polylines) {
+      if (polyline == excludedPolyline) {
+        continue;
+      }
+      float [] [] points = polyline.getPoints();
+      boolean closedPath = polyline.isClosedPath();
+      int pointCount = points.length;
+      for (int i = 0; i < pointCount; i++) {
+        // Endpoint (vertex)
+        double distanceSq = Point2D.distanceSq(points [i] [0], points [i] [1], x, y);
+        if (distanceSq < smallestDistanceSq) {
+          smallestDistanceSq = distanceSq;
+          closestX = points [i] [0];
+          closestY = points [i] [1];
+          found = true;
+        }
+
+        if (i < pointCount - 1 || closedPath) {
+          int nextIndex = (i + 1) % pointCount;
+          float xNext = points [nextIndex] [0];
+          float yNext = points [nextIndex] [1];
+
+          // Segment midpoint
+          float xMid = (points [i] [0] + xNext) / 2f;
+          float yMid = (points [i] [1] + yNext) / 2f;
+          distanceSq = Point2D.distanceSq(xMid, yMid, x, y);
+          if (distanceSq < smallestDistanceSq) {
+            smallestDistanceSq = distanceSq;
+            closestX = xMid;
+            closestY = yMid;
+            found = true;
+          }
+
+          // Perpendicular projection of (x, y) onto the segment (its "foot"),
+          // i.e. the point of the segment closest to (x, y) as measured along
+          // a line perpendicular to the segment. Only a foot that actually
+          // falls within the segment's own bounds counts: a foot outside
+          // [0, 1] would mean the perpendicular from (x, y) meets the
+          // infinite line that supports the segment, but off of the segment
+          // itself.
+          float dx = xNext - points [i] [0];
+          float dy = yNext - points [i] [1];
+          float segmentLengthSq = dx * dx + dy * dy;
+          if (segmentLengthSq > 0) {
+            float t = ((x - points [i] [0]) * dx + (y - points [i] [1]) * dy) / segmentLengthSq;
+            if (t > 0 && t < 1) {
+              float xFoot = points [i] [0] + t * dx;
+              float yFoot = points [i] [1] + t * dy;
+              distanceSq = Point2D.distanceSq(xFoot, yFoot, x, y);
+              if (distanceSq < smallestDistanceSq) {
+                smallestDistanceSq = distanceSq;
+                closestX = xFoot;
+                closestY = yFoot;
+                found = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Intersections between every pair of polyline segments (a polyline
+    // can also self-intersect, e.g. a figure-eight shape, so segments of the
+    // same polyline are compared too, excluding a segment against itself and
+    // against its immediate neighbors, which always share an endpoint and
+    // would otherwise be reported as a spurious "intersection")
+    for (int p1 = 0; p1 < polylines.size(); p1++) {
+      Polyline polyline1 = polylines.get(p1);
+      if (polyline1 == excludedPolyline) {
+        continue;
+      }
+      float [] [] points1 = polyline1.getPoints();
+      boolean closed1 = polyline1.isClosedPath();
+      for (int p2 = p1; p2 < polylines.size(); p2++) {
+        Polyline polyline2 = polylines.get(p2);
+        if (polyline2 == excludedPolyline) {
+          continue;
+        }
+        float [] [] points2 = polyline2.getPoints();
+        boolean closed2 = polyline2.isClosedPath();
+        boolean sameShape = p1 == p2;
+
+        for (int i = 0; i < points1.length - (closed1 ? 0 : 1); i++) {
+          int nextI = (i + 1) % points1.length;
+          for (int j = 0; j < points2.length - (closed2 ? 0 : 1); j++) {
+            if (sameShape
+                && (i == j || Math.abs(i - j) == 1 || (closed1 && Math.abs(i - j) == points1.length - 1))) {
+              // Skip a segment against itself and against its direct
+              // neighbors, which always meet it at a shared endpoint
+              continue;
+            }
+            int nextJ = (j + 1) % points2.length;
+            float [] intersection = computeSegmentsIntersection(points1 [i] [0], points1 [i] [1],
+                points1 [nextI] [0], points1 [nextI] [1], points2 [j] [0], points2 [j] [1], points2 [nextJ] [0],
+                points2 [nextJ] [1]);
+            if (intersection != null) {
+              double distanceSq = Point2D.distanceSq(intersection [0], intersection [1], x, y);
+              if (distanceSq < smallestDistanceSq) {
+                smallestDistanceSq = distanceSq;
+                closestX = intersection [0];
+                closestY = intersection [1];
+                found = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return found
+        ? new ClosestPointResult(closestX, closestY, smallestDistanceSq)
+        : null;
+  }
+
+  /**
+   * Returns the closest point among every intersection between two polyline
+   * segments to (<code>x</code>, <code>y</code>), provided that point lies
+   * within <code>tolerance</code> (a plain, non-squared distance expressed
+   * in the same unit as the plan) of (<code>x</code>, <code>y</code>), or
+   * <code>null</code> if no such intersection is close enough.
+   *
+   * <p>
+   * Unlike {@link #findClosestPolylinePoint(float, float, double, Polyline)}
+   * above, this deliberately ignores polyline endpoints, segment midpoints,
+   * and perpendicular projections onto a segment: rooms and furniture are
+   * meant, for simplicity, to snap firmly and exclusively onto the points
+   * where two polyline segments actually cross each other, rather than onto
+   * every kind of point a polyline can offer. Restricting the candidate set
+   * to intersections only - and always honoring one once it's found within
+   * <code>tolerance</code> - is what makes the snap feel firm and
+   * predictable instead of "weak", since there is no longer a competing
+   * pool of closer-but-less-meaningful endpoint/midpoint/projection
+   * candidates that can win out over an intersection sitting a little
+   * further away.
+   *
+   * @param x         the abscissa of the point to snap
+   * @param y         the ordinate of the point to snap
+   * @param tolerance the maximum distance, in plan units, within which an
+   *                  intersection is considered close enough to snap to
+   */
+  private float [] getClosestPolylineIntersection(float x, float y, float tolerance) {
+    double maxDistanceSq = (double)tolerance * tolerance;
+    double smallestDistanceSq = maxDistanceSq;
+    float closestX = 0;
+    float closestY = 0;
+    boolean found = false;
+
+    List<Polyline> polylines = this.home.getPolylines();
+    // Intersections between every pair of polyline segments (a polyline can
+    // also self-intersect, e.g. a figure-eight shape, so segments of the
+    // same polyline are compared too, excluding a segment against itself
+    // and against its immediate neighbors, which always share an endpoint
+    // and would otherwise be reported as a spurious "intersection")
+    for (int p1 = 0; p1 < polylines.size(); p1++) {
+      Polyline polyline1 = polylines.get(p1);
+      float [] [] points1 = polyline1.getPoints();
+      boolean closed1 = polyline1.isClosedPath();
+      for (int p2 = p1; p2 < polylines.size(); p2++) {
+        Polyline polyline2 = polylines.get(p2);
+        float [] [] points2 = polyline2.getPoints();
+        boolean closed2 = polyline2.isClosedPath();
+        boolean sameShape = p1 == p2;
+
+        for (int i = 0; i < points1.length - (closed1 ? 0 : 1); i++) {
+          int nextI = (i + 1) % points1.length;
+          for (int j = 0; j < points2.length - (closed2 ? 0 : 1); j++) {
+            if (sameShape
+                && (i == j || Math.abs(i - j) == 1 || (closed1 && Math.abs(i - j) == points1.length - 1))) {
+              // Skip a segment against itself and against its direct
+              // neighbors, which always meet it at a shared endpoint
+              continue;
+            }
+            int nextJ = (j + 1) % points2.length;
+            float [] intersection = computeSegmentsIntersection(points1 [i] [0], points1 [i] [1],
+                points1 [nextI] [0], points1 [nextI] [1], points2 [j] [0], points2 [j] [1], points2 [nextJ] [0],
+                points2 [nextJ] [1]);
+            if (intersection != null) {
+              double distanceSq = Point2D.distanceSq(intersection [0], intersection [1], x, y);
+              if (distanceSq < smallestDistanceSq) {
+                smallestDistanceSq = distanceSq;
+                closestX = intersection [0];
+                closestY = intersection [1];
+                found = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return found
+        ? new float [] {closestX, closestY}
+        : null;
+  }
+
+  /**
+   * Returns the closest point among every existing polyline's endpoints
+   * (vertices), segment midpoints, and intersections between two polyline
+   * segments, provided that point lies within <code>tolerance</code> (a
+   * plain, non-squared distance expressed in the same unit as the plan) of
+   * (<code>x</code>, <code>y</code>), or <code>null</code> if no such point
+   * is close enough.
+   *
+   * <p>
+   * This is the room equivalent of
+   * {@link #getClosestPolylineIntersection(float, float, float)} used by
+   * furniture, broadened to also consider endpoints and segment midpoints -
+   * not just intersections - so that a room corner can snap firmly onto any
+   * of these three kinds of meaningful polyline points, the same three kinds
+   * of points {@link #findClosestPolylinePoint(float, float, double,
+   * Polyline)} considers (minus its perpendicular-projection candidates,
+   * which stay deliberately excluded here too, exactly as they are from
+   * {@link #getClosestPolylineIntersection(float, float, float)}, so a room
+   * point never snaps onto an essentially arbitrary point in the middle of a
+   * polyline segment - only onto one of its endpoints, one of its segment
+   * midpoints, or a point where it crosses another polyline segment).
+   *
+   * <p>
+   * As with {@link #getClosestPolylineIntersection(float, float, float)},
+   * once any candidate of these three kinds is found within
+   * <code>tolerance</code>, the closest one always wins over any wall or
+   * room corner magnetism computed by the caller: there is no distance
+   * comparison to lose against those, which is what keeps this a firm snap
+   * instead of one candidate loosely competing among many.
+   *
+   * @param x         the abscissa of the point to snap
+   * @param y         the ordinate of the point to snap
+   * @param tolerance the maximum distance, in plan units, within which an
+   *                  endpoint, midpoint or intersection is considered close
+   *                  enough to snap to
+   */
+  private float [] getClosestPolylineEndpointMidpointOrIntersection(float x, float y, float tolerance) {
+    double maxDistanceSq = (double)tolerance * tolerance;
+    double smallestDistanceSq = maxDistanceSq;
+    float closestX = 0;
+    float closestY = 0;
+    boolean found = false;
+
+    List<Polyline> polylines = this.home.getPolylines();
+
+    // 1. Endpoints (vertices) and segment midpoints of every polyline
+    for (Polyline polyline : polylines) {
+      float [] [] points = polyline.getPoints();
+      boolean closedPath = polyline.isClosedPath();
+      int pointCount = points.length;
+      for (int i = 0; i < pointCount; i++) {
+        // Endpoint (vertex)
+        double distanceSq = Point2D.distanceSq(points [i] [0], points [i] [1], x, y);
+        if (distanceSq < smallestDistanceSq) {
+          smallestDistanceSq = distanceSq;
+          closestX = points [i] [0];
+          closestY = points [i] [1];
+          found = true;
+        }
+
+        if (i < pointCount - 1 || closedPath) {
+          int nextIndex = (i + 1) % pointCount;
+          // Segment midpoint
+          float xMid = (points [i] [0] + points [nextIndex] [0]) / 2f;
+          float yMid = (points [i] [1] + points [nextIndex] [1]) / 2f;
+          distanceSq = Point2D.distanceSq(xMid, yMid, x, y);
+          if (distanceSq < smallestDistanceSq) {
+            smallestDistanceSq = distanceSq;
+            closestX = xMid;
+            closestY = yMid;
+            found = true;
+          }
+        }
+      }
+    }
+
+    // 2. Intersections between every pair of polyline segments (a polyline
+    // can also self-intersect, e.g. a figure-eight shape, so segments of the
+    // same polyline are compared too, excluding a segment against itself
+    // and against its immediate neighbors, which always share an endpoint
+    // and would otherwise be reported as a spurious "intersection") - same
+    // logic as getClosestPolylineIntersection(float, float, float) above,
+    // duplicated here rather than delegated to so this method can keep
+    // comparing every candidate, of all three kinds, against a single
+    // shared smallestDistanceSq instead of running two separate closest-point
+    // searches and then having to reconcile their two independent results.
+    for (int p1 = 0; p1 < polylines.size(); p1++) {
+      Polyline polyline1 = polylines.get(p1);
+      float [] [] points1 = polyline1.getPoints();
+      boolean closed1 = polyline1.isClosedPath();
+      for (int p2 = p1; p2 < polylines.size(); p2++) {
+        Polyline polyline2 = polylines.get(p2);
+        float [] [] points2 = polyline2.getPoints();
+        boolean closed2 = polyline2.isClosedPath();
+        boolean sameShape = p1 == p2;
+
+        for (int i = 0; i < points1.length - (closed1 ? 0 : 1); i++) {
+          int nextI = (i + 1) % points1.length;
+          for (int j = 0; j < points2.length - (closed2 ? 0 : 1); j++) {
+            if (sameShape
+                && (i == j || Math.abs(i - j) == 1 || (closed1 && Math.abs(i - j) == points1.length - 1))) {
+              // Skip a segment against itself and against its direct
+              // neighbors, which always meet it at a shared endpoint
+              continue;
+            }
+            int nextJ = (j + 1) % points2.length;
+            float [] intersection = computeSegmentsIntersection(points1 [i] [0], points1 [i] [1],
+                points1 [nextI] [0], points1 [nextI] [1], points2 [j] [0], points2 [j] [1], points2 [nextJ] [0],
+                points2 [nextJ] [1]);
+            if (intersection != null) {
+              double distanceSq = Point2D.distanceSq(intersection [0], intersection [1], x, y);
+              if (distanceSq < smallestDistanceSq) {
+                smallestDistanceSq = distanceSq;
+                closestX = intersection [0];
+                closestY = intersection [1];
+                found = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return found
+        ? new float [] {closestX, closestY}
+        : null;
+  }
+
+  /**
+   * Tests every corner of <code>piece</code>'s bounding box against the
+   * closest polyline segment intersection within
+   * {@link #getPolylineMagnetismMargin()}, and, if any corner is close
+   * enough to one, translates <code>piece</code> so that the corner with
+   * the closest match lands exactly on that intersection.
+   *
+   * <p>
+   * This mirrors the firm room point snap implemented by
+   * {@link #getClosestPolylineEndpointMidpointOrIntersection(float, float,
+   * float)}, except that furniture deliberately snaps onto intersections
+   * only, ignoring polyline endpoints and segment midpoints: rather than
+   * testing the distance from the mouse cursor
+   * to a polyline - which almost never coincides with any meaningful point
+   * of the piece itself, since the cursor is usually offset from the piece
+   * by wherever the user happened to grab it - each of the four corners of
+   * the piece is tested directly, and the whole piece is translated by
+   * exactly the delta needed to bring its best-matching corner onto the
+   * intersection point. This is what makes a corner of the piece snap
+   * firmly onto a polyline intersection, instead of the piece's position
+   * only loosely correlating with a polyline point near the cursor.
+   *
+   * @return <code>true</code> if a corner was snapped onto an intersection,
+   *         <code>false</code> otherwise
+   */
+  private boolean snapPieceOfFurnitureCornersToPolylineIntersections(HomePieceOfFurniture piece) {
+    float polylineMargin = getPolylineMagnetismMargin();
+    float [] [] piecePoints = piece.getPoints();
+    double bestDistanceSq = Double.MAX_VALUE;
+    float bestDeltaX = 0;
+    float bestDeltaY = 0;
+    boolean cornerSnapped = false;
+
+    for (float [] corner : piecePoints) {
+      float [] intersection = getClosestPolylineIntersection(corner [0], corner [1], polylineMargin);
+      if (intersection != null) {
+        double distanceSq = Point2D.distanceSq(corner [0], corner [1], intersection [0], intersection [1]);
+        if (distanceSq < bestDistanceSq) {
+          bestDistanceSq = distanceSq;
+          bestDeltaX = intersection [0] - corner [0];
+          bestDeltaY = intersection [1] - corner [1];
+          cornerSnapped = true;
+        }
+      }
+    }
+
+    if (cornerSnapped) {
+      piece.setX(piece.getX() + bestDeltaX);
+      piece.setY(piece.getY() + bestDeltaY);
+    }
+    return cornerSnapped;
+  }
+
+  /**
+   * A point which coordinates are equal to the closest point of a wall, a
+   * room, or a polyline (its endpoints, segment midpoints, and segment
+   * intersections).
    */
   private class PointMagnetizedToClosestWallOrRoomPoint {
     private float   x;
@@ -9274,7 +9761,65 @@ public class PlanController extends FurnitureController implements Controller {
         smallestDistance = updateMagnetizedPoint(room == editedRoom ? editedPointIndex : - 1,
             x, y, smallestDistance, room.getPoints());
       }
-      this.magnetized = smallestDistance <= margin * margin;
+      boolean magnetizedToWallOrRoom = smallestDistance <= margin * margin;
+
+      // Also let the room point being dragged magnetize onto a polyline's
+      // endpoints, segment midpoints, perpendicular projections, and segment
+      // intersections, exactly as it already does for walls and rooms above.
+      //
+      // This search uses its own, more generous margin
+      // (getPolylineMagnetismMargin()) instead of the tight wall/room
+      // selection margin: previously it reused whatever "smallestDistance"
+      // the wall/room search above had reached as its search radius, and the
+      // final magnetized test below only accepted a result within the tiny
+      // 4-pixel selection margin - so in practice a polyline point had to be
+      // almost exactly under the cursor to ever register, which is why
+      // polyline magnetism felt "very weak" compared to the wall/room
+      // magnetism it was layered on top of.
+      //
+      // SUPERSEDED: this used to compare distances against every kind of
+      // polyline point (endpoints, midpoints, perpendicular projections AND
+      // intersections) and only won if it happened to be closer than the
+      // wall/room candidate, which is still exactly the kind of "many
+      // competing candidates" situation that made the snap feel weak and
+      // unpredictable. See the firm, endpoints/midpoints/intersections-only
+      // replacement below.
+      // float polylineMargin = getPolylineMagnetismMargin();
+      // ClosestPointResult polylinePoint = findClosestPolylinePoint(x, y, (double)polylineMargin * polylineMargin, null);
+      // if (polylinePoint != null
+      //     && (!magnetizedToWallOrRoom || polylinePoint.distanceSq < smallestDistance)) {
+      //   this.x = polylinePoint.x;
+      //   this.y = polylinePoint.y;
+      //   smallestDistance = polylinePoint.distanceSq;
+      //   // The polyline candidate was already found within its own
+      //   // (independent) margin, so it counts as magnetized on its own,
+      //   // regardless of whether it also happens to fall within the
+      //   // tighter wall/room margin tested below.
+      //   this.magnetized = true;
+      //   return;
+      // }
+
+      // For simplicity, and so the snap feels solid rather than "weak", a
+      // room point being placed or dragged now magnetizes firmly onto the
+      // closest point among a polyline's endpoints, its segment midpoints,
+      // and the intersections between two polyline segments - ignoring only
+      // perpendicular projections onto a segment (an essentially arbitrary
+      // point along its length, rather than one of its meaningful
+      // endpoint/midpoint/intersection points). Once one of these three
+      // kinds of point is found within the margin below, it always wins
+      // over any wall or room corner magnetism computed above: there is no
+      // distance comparison to lose, which is precisely what makes this a
+      // firm snap instead of one candidate loosely competing among many.
+      float polylineMargin = getPolylineMagnetismMargin();
+      float [] polylinePoint = getClosestPolylineEndpointMidpointOrIntersection(x, y, polylineMargin);
+      if (polylinePoint != null) {
+        this.x = polylinePoint [0];
+        this.y = polylinePoint [1];
+        this.magnetized = true;
+        return;
+      }
+
+      this.magnetized = magnetizedToWallOrRoom;
       if (!this.magnetized) {
         // Don't magnetism if closest wall point is too far
         this.x = x;
@@ -9870,6 +10415,67 @@ public class PlanController extends FurnitureController implements Controller {
             if (referencePiece == null) {
               adjustPieceOfFurnitureInShelfBox(this.movedPieceOfFurniture, false);
             }
+            // Let the moved piece of furniture also magnetize onto a nearby
+            // polyline's endpoint, segment midpoint, perpendicular
+            // projection, or segment intersection, the same way it already
+            // magnetizes onto a wall side or a neighboring piece of
+            // furniture above. This only overrides the piece's location
+            // (not its angle), and only when no wall magnetism already
+            // pulled it into place, so wall snapping - which additionally
+            // handles rotation and elevation - keeps priority when both
+            // could apply.
+            //
+            // Two things had to change from the very first version of this
+            // check for it to actually trigger in practice:
+            //  1. It now tests the distance from the *cursor* (x, y) to the
+            //     polyline, not from the piece's center. The piece's center
+            //     only ever coincides with the cursor if you happened to
+            //     grab the piece exactly in its middle; grab it anywhere
+            //     else (the normal case) and the center stays offset from
+            //     the cursor by that same constant grab offset for the
+            //     entire drag, so a margin around the center alone almost
+            //     never sees the polyline at all.
+            //  2. It uses the larger, dedicated getPolylineMagnetismMargin()
+            //     instead of the tight 4-pixel selection margin, which was
+            //     too small to reliably hit with normal mouse movement.
+            // Once a polyline point is found near the cursor, the piece is
+            // translated by the same (snapX - x, snapY - y) delta rather
+            // than being moved straight onto that point, so the spot on the
+            // piece the user actually grabbed lands exactly on the snapped
+            // point - the piece doesn't jump to a different position
+            // relative to the cursor than the one the user is dragging it
+            // to.
+            //
+            // SUPERSEDED: this still tested the distance from the *cursor*
+            // to the polyline rather than from the piece's own geometry, so
+            // in practice the piece would only snap when the cursor itself
+            // happened to be right on top of a polyline point - which,
+            // combined with matching against every kind of polyline point
+            // (not just intersections), is exactly why furniture snapping
+            // "seemed not working" in practice. See the firm, corner-based,
+            // intersections-only replacement below.
+            // if (magnetWall == null) {
+            //   float polylineMargin = getPolylineMagnetismMargin();
+            //   ClosestPointResult polylinePoint = findClosestPolylinePoint(x, y,
+            //       (double)polylineMargin * polylineMargin, null);
+            //   if (polylinePoint != null) {
+            //     this.movedPieceOfFurniture.setX(this.movedPieceOfFurniture.getX() + (polylinePoint.x - x));
+            //     this.movedPieceOfFurniture.setY(this.movedPieceOfFurniture.getY() + (polylinePoint.y - y));
+            //   }
+            // }
+
+            // For simplicity, and so the snap feels solid rather than
+            // "weak" or simply not working, a moved piece of furniture now
+            // magnetizes firmly onto a polyline exclusively through its own
+            // four bounding-box corners: each corner is tested directly
+            // against the closest polyline segment intersection, and the
+            // whole piece is translated by exactly the delta needed to
+            // bring its best-matching corner onto that intersection. This
+            // only runs when no wall magnetism already placed the piece,
+            // so wall snapping keeps priority when both could apply.
+            if (magnetWall == null) {
+              snapPieceOfFurnitureCornersToPolylineIntersections(this.movedPieceOfFurniture);
+            }
             if (feedbackDisplayed && magnetWall != null) {
               getView().setDimensionLinesFeedback(getDimensionLinesAlongWall(this.movedPieceOfFurniture, magnetWall));
             } else {
@@ -10383,6 +10989,14 @@ public class PlanController extends FurnitureController implements Controller {
         if (referencePiece == null) {
           adjustPieceOfFurnitureInShelfBox(this.draggedPieceOfFurniture, magnetWall == null);
         }
+        // Let a piece of furniture freshly dragged in from the catalog snap
+        // the same firm, corner-based way onto a polyline intersection as a
+        // piece already on the plan being moved does in
+        // SelectionMoveState.moveMouse() above, again only when no wall
+        // magnetism already placed it.
+        if (magnetWall == null) {
+          snapPieceOfFurnitureCornersToPolylineIntersections(this.draggedPieceOfFurniture);
+        }
         if (feedbackDisplayed && magnetWall != null) {
           getView().setDimensionLinesFeedback(getDimensionLinesAlongWall(this.draggedPieceOfFurniture, magnetWall));
         } else {
@@ -10409,6 +11023,15 @@ public class PlanController extends FurnitureController implements Controller {
    */
   private class WallCreationState extends AbstractModeChangeState {
     private boolean magnetismEnabled;
+    // Holds the firm geometric snap point (polyline or room endpoint,
+    // midpoint, intersection, or perpendicular projection) found for the
+    // current mouse hover, cached here so pressMouse() below can reuse the
+    // exact same point that was already shown to the user as feedback,
+    // instead of recomputing it from possibly slightly different
+    // coordinates at press time (which is the same class of bug that used
+    // to prevent a new polyline's or room's very first point from snapping
+    // - see nextPolylineStartPoint's remarks).
+    private SnapPoint hoveredSnapPoint;
 
     @Override
     public Mode getMode() {
@@ -10419,23 +11042,75 @@ public class PlanController extends FurnitureController implements Controller {
     public void enter() {
       getView().setCursor(PlanView.CursorType.DRAW);
       toggleMagnetism(wasMagnetismToggledLastMousePress());
+      this.hoveredSnapPoint = null;
     }
 
     @Override
     public void moveMouse(float x, float y) {
+      PlanView planView = getView();
       if (this.magnetismEnabled) {
+        // First look for a firm geometric snap onto a nearby polyline or
+        // room feature (endpoint, midpoint, intersection, or perpendicular
+        // projection), exactly as PolylineCreationState already does before
+        // a new polyline's first point is placed. Once such a firm snap is
+        // found, it always wins over the softer wall-corner / angle
+        // magnetism computed by WallPointWithAngleMagnetism below - there
+        // is no distance comparison to lose, which is what makes this a
+        // firm snap instead of one candidate loosely competing among many.
+        // Only fall back to WallPointWithAngleMagnetism when no such firm
+        // snap is found, so a wall - like a polyline or a room - snaps
+        // firmly onto a polyline or room point instead of merely aligning
+        // loosely with it.
+        float snapTolerance = planView.getPixelLength() * 6f;
+        this.hoveredSnapPoint = getGeometricSnapPoint(x, y, snapTolerance, null);
+        if (this.hoveredSnapPoint != null) {
+          x = this.hoveredSnapPoint.x;
+          y = this.hoveredSnapPoint.y;
+          // Show the AutoCAD-style snap marker (endpoint / midpoint /
+          // intersection / perpendicular) at the firm snap point, exactly
+          // as PolylineCreationState.moveMouse() already does, so the user
+          // gets the same visual confirmation of a wall snapping onto a
+          // polyline or room feature that a polyline already gets when it
+          // snaps onto another polyline or a room.
+          planView.setSnapFeedback(this.hoveredSnapPoint.type, this.hoveredSnapPoint.x, this.hoveredSnapPoint.y);
+        } else {
         WallPointWithAngleMagnetism point = new WallPointWithAngleMagnetism(null, x, y, x, y);
         x = point.getX();
         y = point.getY();
+          planView.setSnapFeedback(null, 0, 0); // Clear snap marker
+        }
+      } else {
+        this.hoveredSnapPoint = null;
+        planView.setSnapFeedback(null, 0, 0); // Clear snap marker
       }
       if (feedbackDisplayed) {
-        getView().setAlignmentFeedback(Wall.class, null, x, y, false);
+        planView.setAlignmentFeedback(Wall.class, null, x, y, false);
       }
     }
 
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Snap the very first point of the new wall to a nearby polyline or
+      // room endpoint, midpoint, intersection, or perpendicular projection,
+      // using the cached hover snap point so a micro-movement of the mouse
+      // between the last move event and the actual press can't break the
+      // snap - mirrors nextRoomStartPoint / nextPolylineStartPoint and the
+      // analogous caching already done in RoomCreationState.pressMouse() and
+      // PolylineCreationState.pressMouse().
+      if (this.magnetismEnabled) {
+        if (this.hoveredSnapPoint != null) {
+          PlanController.this.nextWallStartPoint = new float [] {this.hoveredSnapPoint.x, this.hoveredSnapPoint.y};
+        } else {
+          float snapTolerance = getView().getPixelLength() * 6f;
+          SnapPoint snapPoint = getGeometricSnapPoint(x, y, snapTolerance, null);
+          PlanController.this.nextWallStartPoint = snapPoint != null
+              ? new float [] {snapPoint.x, snapPoint.y}
+              : null;
+        }
+      } else {
+        PlanController.this.nextWallStartPoint = null;
+      }
       // Change state to WallDrawingState
       setState(getWallDrawingState());
     }
@@ -10658,6 +11333,14 @@ public class PlanController extends FurnitureController implements Controller {
     private boolean          roundWall;
     private long             lastWallCreationTime;
     private Float            wallArcExtent;
+    // Holds the firm geometric snap point (polyline or room endpoint,
+    // midpoint, intersection, or perpendicular projection) found for the
+    // wall point currently being drawn, cached here so pressMouse() below
+    // can reuse the exact same point that was already shown to the user as
+    // feedback, instead of recomputing it from possibly slightly different
+    // coordinates at press time - mirrors the analogous caching already
+    // done in PolylineDrawingState.
+    private SnapPoint        hoveredSnapPoint;
 
     @Override
     public Mode getMode() {
@@ -10716,18 +11399,39 @@ public class PlanController extends FurnitureController implements Controller {
         if (this.wallStartAtStart != null) {
           this.xStart = this.wallStartAtStart.getXStart();
           this.yStart = this.wallStartAtStart.getYStart();
+        } else if (PlanController.this.nextWallStartPoint != null) {
+          // Use the firm geometric snap point (polyline or room endpoint,
+          // midpoint, intersection, or perpendicular projection) computed
+          // for the first click in WallCreationState instead of
+          // recomputing it from the last mouse move coordinates, which
+          // could differ ever so slightly from the coordinates actually
+          // used at press time and silently break the snap for the wall's
+          // very first point - mirrors nextRoomStartPoint's and
+          // nextPolylineStartPoint's consumption in RoomDrawingState.enter()
+          // and PolylineDrawingState.enter(). This only applies when no
+          // free existing wall start or end point was already found above,
+          // since continuing an existing wall chain always takes
+          // precedence over snapping onto a polyline or room point.
+          this.xStart = PlanController.this.nextWallStartPoint [0];
+          this.yStart = PlanController.this.nextWallStartPoint [1];
         } else if (this.magnetismEnabled) {
           WallPointWithAngleMagnetism point = new WallPointWithAngleMagnetism(null, this.xStart, this.yStart, this.xStart, this.yStart);
           this.xStart = point.getX();
           this.yStart = point.getY();
         }
       }
+      // The cached first-point snap, if any, has now been consumed (or
+      // deliberately skipped because a free wall start/end point took
+      // precedence over it) - clear it so it can never leak into a later,
+      // unrelated wall drawing session.
+      PlanController.this.nextWallStartPoint = null;
       this.newWall = null;
       this.wallStartAtEnd = null;
       this.wallEndAtEnd = null;
       this.lastWall = null;
       this.newWalls = new ArrayList<Wall>();
       this.lastWallCreationTime = -1;
+      this.hoveredSnapPoint = null;
       deselectAll();
       setDuplicationActivated(wasDuplicationActivatedLastMousePress());
       if (feedbackDisplayed) {
@@ -10753,6 +11457,53 @@ public class PlanController extends FurnitureController implements Controller {
       } else {
         xEnd = x;
         yEnd = y;
+      }
+
+      // Look for a firm geometric snap onto a nearby polyline or room
+      // feature (endpoint, midpoint, intersection, or a perpendicular
+      // projection of a segment coming from the wall's start point).
+      // Exactly as PolylineDrawingState.moveMouse() already does for a
+      // polyline segment being drawn, this always wins over the softer
+      // angle / wall-corner magnetism computed above once magnetism is
+      // enabled - there is no distance comparison to lose, which is what
+      // makes the wall snap firmly onto a polyline or room point instead
+      // of just loosely competing with wall-corner and angle magnetism for
+      // it.
+      // This geometric snap is only attempted when the shift-activated
+      // angle alignment (this.alignmentActivated) is NOT in effect: shift
+      // locks the wall onto a specific, user-chosen angle (e.g. exactly
+      // 90°), and letting a nearby polyline or room feature silently pull
+      // the end point off that locked angle - just because the cursor
+      // happened to pass close to such a feature - is precisely why the
+      // shift-angle lock felt "very weak" in practice. When shift is held,
+      // the angle lock now always takes precedence and this geometric snap
+      // is skipped entirely, leaving xEnd/yEnd exactly as computed by
+      // PointWithAngleMagnetism above.
+      SnapPoint snapPoint = null;
+      if (this.magnetismEnabled && !this.alignmentActivated) {
+        float snapTolerance = planView.getPixelLength() * 6f;
+        snapPoint = getGeometricSnapPoint(x, y, snapTolerance, null, this.xStart, this.yStart);
+        if (snapPoint != null) {
+          xEnd = snapPoint.x;
+          yEnd = snapPoint.y;
+        }
+      }
+      // Cache it (regardless of whether it ended up used) so pressMouse()
+      // can reuse this exact computation and guard against a micro-movement
+      // of the mouse between this move event and the actual press breaking
+      // the snap.
+      this.hoveredSnapPoint = snapPoint;
+
+      // Show the AutoCAD-style snap marker (endpoint / midpoint /
+      // intersection / perpendicular) at the firm snap point, exactly as
+      // PolylineDrawingState.moveMouse() already does, so the user gets the
+      // same visual confirmation of a wall snapping onto a polyline or room
+      // feature that a polyline already gets when it snaps onto another
+      // polyline or a room.
+      if (snapPoint != null) {
+        planView.setSnapFeedback(snapPoint.type, snapPoint.x, snapPoint.y);
+      } else {
+        planView.setSnapFeedback(null, 0, 0); // Clear snap marker
       }
 
       // If current wall doesn't exist
@@ -10809,6 +11560,19 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Use the cached firm geometric snap point (if any) to guard against a
+      // micro-movement of the mouse between the last moveMouse() call and
+      // this press breaking the snap onto a polyline or room feature -
+      // mirrors the analogous guard in PolylineDrawingState.pressMouse().
+      // This only applies while the wall's end point is still being placed:
+      // once a round wall has moved on to editing its arc extent
+      // (this.wallArcExtent != null), xEnd/yEnd no longer apply and the
+      // wall's end point is already fixed, so it must be left untouched.
+      if (this.newWall != null && this.wallArcExtent == null && this.magnetismEnabled
+          && this.hoveredSnapPoint != null) {
+        this.newWall.setXEnd(this.hoveredSnapPoint.x);
+        this.newWall.setYEnd(this.hoveredSnapPoint.y);
+      }
       if (clickCount == 2) {
         Selectable selectableItem = getSelectableItemAt(x, y);
         if (this.newWalls.size() == 0
@@ -13842,6 +14606,14 @@ public class PlanController extends FurnitureController implements Controller {
    */
   private class RoomCreationState extends AbstractModeChangeState {
     private boolean magnetismEnabled;
+    // Holds the geometric (firm, polyline-intersection) snap point found for
+    // the current mouse hover, cached here so pressMouse() below can reuse
+    // the exact same point that was already shown to the user as feedback,
+    // instead of recomputing it from possibly slightly different
+    // coordinates at press time (which is the same class of bug that used
+    // to prevent a new polyline's very first point from snapping - see
+    // nextPolylineStartPoint's remarks).
+    private PointMagnetizedToClosestWallOrRoomPoint hoveredSnapPoint;
 
     @Override
     public Mode getMode() {
@@ -13852,6 +14624,7 @@ public class PlanController extends FurnitureController implements Controller {
     public void enter() {
       getView().setCursor(PlanView.CursorType.DRAW);
       toggleMagnetism(wasMagnetismToggledLastMousePress());
+      this.hoveredSnapPoint = null;
     }
 
     @Override
@@ -13859,6 +14632,10 @@ public class PlanController extends FurnitureController implements Controller {
       if (feedbackDisplayed && this.magnetismEnabled) {
         // Find the closest wall or room point to current mouse location
         PointMagnetizedToClosestWallOrRoomPoint point = new PointMagnetizedToClosestWallOrRoomPoint(x, y);
+        // Cache it (regardless of whether it ended up magnetized) so
+        // pressMouse() can reuse this exact computation for the room's
+        // very first point.
+        this.hoveredSnapPoint = point;
         if (point.isMagnetized()) {
           getView().setAlignmentFeedback(Room.class, null, point.getX(),
               point.getY(), point.isMagnetized());
@@ -13869,6 +14646,7 @@ public class PlanController extends FurnitureController implements Controller {
               pointWithAngleMagnetism.getY(), point.isMagnetized());
         }
       } else {
+        this.hoveredSnapPoint = null;
         getView().setAlignmentFeedback(Room.class, null, x, y, false);
       }
     }
@@ -13876,6 +14654,19 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Snap the very first point of the new room to a nearby polyline
+      // intersection (or wall/room corner) exactly like every subsequent
+      // point already does in RoomDrawingState.moveMouse(), using the
+      // cached hover snap point so a micro-movement of the mouse between
+      // the last move event and the actual press can't break the snap.
+      if (this.magnetismEnabled) {
+        PointMagnetizedToClosestWallOrRoomPoint point = this.hoveredSnapPoint != null
+            ? this.hoveredSnapPoint
+            : new PointMagnetizedToClosestWallOrRoomPoint(x, y);
+        PlanController.this.nextRoomStartPoint = new float [] {point.getX(), point.getY()};
+      } else {
+        PlanController.this.nextRoomStartPoint = null;
+      }
       // Change state to RoomDrawingState
       setState(getRoomDrawingState());
     }
@@ -14117,7 +14908,19 @@ public class PlanController extends FurnitureController implements Controller {
       this.newRoom = null;
       this.alignmentActivated = wasAlignmentActivatedLastMousePress();
       toggleMagnetism(wasMagnetismToggledLastMousePress());
-      if (this.magnetismEnabled) {
+      if (PlanController.this.nextRoomStartPoint != null) {
+        // Use the firm geometric snap point computed for the first click in
+        // RoomCreationState instead of recomputing it from the last mouse
+        // move coordinates, which could differ ever so slightly from the
+        // coordinates actually used at press time and silently break the
+        // snap for the room's very first point.
+        this.xPreviousPoint = PlanController.this.nextRoomStartPoint [0];
+        this.yPreviousPoint = PlanController.this.nextRoomStartPoint [1];
+        PlanController.this.nextRoomStartPoint = null;
+        if (feedbackDisplayed) {
+          getView().setAlignmentFeedback(Room.class, null, this.xPreviousPoint, this.yPreviousPoint, true);
+        }
+      } else if (this.magnetismEnabled) {
         // Find the closest wall or room point to current mouse location
         PointMagnetizedToClosestWallOrRoomPoint point = new PointMagnetizedToClosestWallOrRoomPoint(
             getXLastMouseMove(), getYLastMouseMove());
