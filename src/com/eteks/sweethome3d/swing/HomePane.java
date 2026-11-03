@@ -5823,6 +5823,7 @@ public class HomePane extends JRootPane implements HomeView {
    */
   public List<Camera> showDeletedCamerasDialog() {
     // Build stored cameras list
+    final
     List<Camera> storedCameras = this.home.getStoredCameras();
     final List<Camera> selectedCameras = new ArrayList<Camera>();
     final JList camerasList = new JList(storedCameras.toArray());
@@ -5846,6 +5847,7 @@ public class HomePane extends JRootPane implements HomeView {
         }
       });
     camerasList.getInputMap().put(KeyStroke.getKeyStroke("pressed SPACE"), "toggleSelection");
+    camerasList.getInputMap().put(KeyStroke.getKeyStroke("ctrl A"), "selectAll");
     final AbstractAction toggleSelectionAction = new AbstractAction() {
         public void actionPerformed(ActionEvent ev) {
           Camera selectedCamera = (Camera)camerasList.getSelectedValue();
@@ -5860,7 +5862,15 @@ public class HomePane extends JRootPane implements HomeView {
           }
         }
       };
+    final AbstractAction selectAllAction = new AbstractAction() {
+        public void actionPerformed(ActionEvent ev) {
+          selectedCameras.clear();
+          selectedCameras.addAll(storedCameras);
+          camerasList.repaint();
+        }
+      };
     camerasList.getActionMap().put("toggleSelection", toggleSelectionAction);
+    camerasList.getActionMap().put("selectAll", selectAllAction);
     camerasList.addMouseListener(new MouseAdapter() {
         @Override
         public void mouseClicked(MouseEvent ev) {
