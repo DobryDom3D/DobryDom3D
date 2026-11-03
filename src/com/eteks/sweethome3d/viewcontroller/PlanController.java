@@ -8904,7 +8904,7 @@ public class PlanController extends FurnitureController implements Controller {
    * A point which coordinates are computed with an angle magnetism algorithm.
    */
   private static class PointWithAngleMagnetism {
-    private static final int CIRCLE_STEPS_15_DEG = 24;
+    private static final int CIRCLE_STEPS_15_DEG = 72;  // 5 degrees angle snap
 
     private float x;
     private float y;
@@ -12384,7 +12384,7 @@ public class PlanController extends FurnitureController implements Controller {
    * Furniture name rotation state. This state manages the name rotation of a piece of furniture.
    */
   private class PieceOfFurnitureNameRotationState extends ControllerState {
-    private static final int     STEP_COUNT = 24;
+    private static final int     STEP_COUNT = 24;       // 15 degrees
 
     private HomePieceOfFurniture selectedPiece;
     private float                oldNameAngle;
