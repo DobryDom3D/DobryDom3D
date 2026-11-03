@@ -3330,10 +3330,9 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
               selectionColor, locationFeedbackStroke, planScale,
               selectionOutlinePaint, selectionOutlineStroke);
         } else if (Polyline.class.isAssignableFrom(this.alignedObjectClass)) {
-          if (this.showPointFeedback) {
-            paintPointFeedback(g2D, this.locationFeeback, selectionColor, planScale, selectionOutlinePaint, selectionOutlineStroke);
-          }
-        } else if (DimensionLine.class.isAssignableFrom(this.alignedObjectClass)) {
+          paintPolylineAlignmentFeedback (g2D, (Polyline)this.alignedObjectFeedback, level, this.locationFeeback,
+              this.showPointFeedback, selectionColor, locationFeedbackStroke, planScale, selectionOutlinePaint, selectionOutlineStroke);
+          } else if (DimensionLine.class.isAssignableFrom(this.alignedObjectClass)) {
           paintDimensionLineAlignmentFeedback(g2D, (DimensionLine)this.alignedObjectFeedback, level, this.locationFeeback, this.showPointFeedback,
               selectionColor, locationFeedbackStroke, planScale,
               selectionOutlinePaint, selectionOutlineStroke);
@@ -5978,6 +5977,144 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
   private boolean equalsWallPoint(float x, float y, Wall wall) {
     return x == wall.getXStart() && y == wall.getYStart()
            || x == wall.getXEnd() && y == wall.getYEnd();
+  }
+
+  /**
+   * Paints polyline location feedback.
+   *
+   * <p>This mirrors wall alignment feedback: when the current polyline endpoint
+   * is horizontally or vertically aligned with a vertex of another polyline,
+   * draw the same dotted alignment guide between the two points.</p>
+   */
+  private void paintPolylineAlignmentFeedback(Graphics2D g2D, Polyline alignedPolyline, Level level,
+                                              Point2D locationFeedback, boolean showPointFeedback,
+                                              Paint feedbackPaint, Stroke feedbackStroke, float planScale,
+                                              Paint pointPaint, Stroke pointStroke) {
+    if (locationFeedback != null) {
+      float margin = 0.5f / planScale;
+      float x = (float)locationFeedback.getX();
+      float y = (float)locationFeedback.getY();
+      float deltaXToClosestPolyline = Float.POSITIVE_INFINITY;
+      float deltaYToClosestPolyline = Float.POSITIVE_INFINITY;
+
+      // The feedback is only meaningful when the segment currently being drawn
+      // has a real direction and the matching point belongs to another segment
+      // that is parallel to it. This prevents the guide from being shown merely
+      // because some unrelated vertex happens to share X or Y.
+      float currentDx = 0;
+      float currentDy = 0;
+      float [] [] alignedPoints = alignedPolyline == null ? null : alignedPolyline.getPoints();
+      int currentPointIndex = -1;
+      if (alignedPoints != null && alignedPoints.length >= 2) {
+        for (int i = 0; i < alignedPoints.length; i++) {
+          if (Math.abs(alignedPoints[i][0] - x) < margin && Math.abs(alignedPoints[i][1] - y) < margin) {
+            currentPointIndex = i;
+            break;
+          }
+        }
+        if (currentPointIndex < 0) {
+          currentPointIndex = alignedPoints.length - 1;
+        }
+        int previousIndex = currentPointIndex - 1;
+        if (previousIndex < 0 && alignedPolyline.isClosedPath()) {
+          previousIndex = alignedPoints.length - 1;
+        }
+        if (previousIndex >= 0) {
+          currentDx = x - alignedPoints[previousIndex][0];
+          currentDy = y - alignedPoints[previousIndex][1];
+        }
+      }
+
+      float currentLength = (float)Math.hypot(currentDx, currentDy);
+      if (currentLength > 0.001f) {
+        for (Polyline polyline : this.home.getPolylines()) {
+          float [] [] points = polyline.getPoints();
+          if (points == null || points.length < 2) {
+            continue;
+          }
+
+          boolean closed = polyline.isClosedPath();
+          int segmentCount = points.length - (closed ? 0 : 1);
+          for (int i = 0; i < segmentCount; i++) {
+            int next = (i + 1) % points.length;
+
+            // Never compare the active segment with itself. Other segments of
+            // the same polyline are intentionally allowed.
+            if (polyline == alignedPolyline
+                && currentPointIndex >= 0
+                && (i == currentPointIndex - 1
+                    || (closed && currentPointIndex == 0 && i == points.length - 1))) {
+              continue;
+            }
+
+            float dx = points[next][0] - points[i][0];
+            float dy = points[next][1] - points[i][1];
+            float segmentLength = (float)Math.hypot(dx, dy);
+            if (segmentLength <= 0.001f) {
+              continue;
+            }
+
+            // Parallel test using the normalized 2-D cross product.
+            float parallelError = Math.abs(currentDx * dy - currentDy * dx)
+                / (currentLength * segmentLength);
+            if (parallelError > 0.001f) {
+              continue;
+            }
+
+            for (int endpoint = 0; endpoint < 2; endpoint++) {
+              int pointIndex = endpoint == 0 ? i : next;
+              if (polyline == alignedPolyline && pointIndex == currentPointIndex) {
+                continue;
+              }
+
+              float pointX = points[pointIndex][0];
+              float pointY = points[pointIndex][1];
+
+              if (Math.abs(x - pointX) < margin
+                  && Math.abs(deltaYToClosestPolyline) > Math.abs(y - pointY)) {
+                deltaYToClosestPolyline = y - pointY;
+              }
+
+              if (Math.abs(y - pointY) < margin
+                  && Math.abs(deltaXToClosestPolyline) > Math.abs(x - pointX)) {
+                deltaXToClosestPolyline = x - pointX;
+              }
+            }
+          }
+        }
+      }
+
+      // Draw only when an actual parallel-segment alignment was found.
+      if (deltaXToClosestPolyline != Float.POSITIVE_INFINITY
+          || deltaYToClosestPolyline != Float.POSITIVE_INFINITY) {
+        g2D.setPaint(feedbackPaint);
+        g2D.setStroke(feedbackStroke);
+
+        if (deltaXToClosestPolyline != Float.POSITIVE_INFINITY) {
+          if (deltaXToClosestPolyline > 0) {
+            g2D.draw(new Line2D.Float(x + ALIGNMENT_LINE_OFFSET / planScale, y,
+                x - deltaXToClosestPolyline - ALIGNMENT_LINE_OFFSET / planScale, y));
+          } else {
+            g2D.draw(new Line2D.Float(x - ALIGNMENT_LINE_OFFSET / planScale, y,
+                x - deltaXToClosestPolyline + ALIGNMENT_LINE_OFFSET / planScale, y));
+          }
+        }
+
+        if (deltaYToClosestPolyline != Float.POSITIVE_INFINITY) {
+          if (deltaYToClosestPolyline > 0) {
+            g2D.draw(new Line2D.Float(x, y + ALIGNMENT_LINE_OFFSET / planScale, x,
+                y - deltaYToClosestPolyline - ALIGNMENT_LINE_OFFSET / planScale));
+          } else {
+            g2D.draw(new Line2D.Float(x, y - ALIGNMENT_LINE_OFFSET / planScale, x,
+                y - deltaYToClosestPolyline + ALIGNMENT_LINE_OFFSET / planScale));
+          }
+        }
+      }
+
+      if (showPointFeedback) {
+        paintPointFeedback(g2D, locationFeedback, feedbackPaint, planScale, pointPaint, pointStroke);
+      }
+    }
   }
 
   /**

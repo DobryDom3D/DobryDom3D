@@ -9164,6 +9164,71 @@ public class PlanController extends FurnitureController implements Controller {
   }
 
   /**
+   * A point with coordinates computed with angle and polyline point magnetism.
+   *
+   * This mirrors WallPointWithAngleMagnetism for polyline drawing: when the
+   * current point is close to the X or Y coordinate of an existing polyline
+   * vertex, the point is projected onto the current segment's line so the
+   * endpoint snaps to the same imaginary alignment line.
+   */
+  private class PolylinePointWithAngleMagnetism extends PointWithAngleMagnetism {
+    public PolylinePointWithAngleMagnetism(Polyline editedPolyline, float xPolyline, float yPolyline,
+                                           float x, float y) {
+      super(xPolyline, yPolyline, x, y, preferences.getLengthUnit(), getView().getPixelLength());
+      float margin = PIXEL_MARGIN / getScale();
+      float deltaXToClosestPoint = Float.POSITIVE_INFINITY;
+      float deltaYToClosestPoint = Float.POSITIVE_INFINITY;
+      float xClosestPoint = 0;
+      float yClosestPoint = 0;
+
+      for (Polyline polyline : home.getPolylines()) {
+        if (polyline == editedPolyline) {
+          continue;
+        }
+        float [] [] points = polyline.getPoints();
+        if (points == null) {
+          continue;
+        }
+        for (float [] point : points) {
+          if (Math.abs(getX() - point [0]) < margin) {
+            if (Math.abs(deltaYToClosestPoint) > Math.abs(getY() - point [1])) {
+              xClosestPoint = point [0];
+              deltaYToClosestPoint = getY() - point [1];
+            }
+          }
+          if (Math.abs(getY() - point [1]) < margin) {
+            if (Math.abs(deltaXToClosestPoint) > Math.abs(getX() - point [0])) {
+              yClosestPoint = point [1];
+              deltaXToClosestPoint = getX() - point [0];
+            }
+          }
+        }
+      }
+
+      double alpha = -Math.tan(getAngle());
+      double beta = Math.abs(alpha) < 1E10
+          ? yPolyline - alpha * xPolyline
+          : Double.POSITIVE_INFINITY;
+
+      if (deltaXToClosestPoint != Float.POSITIVE_INFINITY && Math.abs(alpha) > 1E-10) {
+        float newX = (float)((yClosestPoint - beta) / alpha);
+        if (Point2D.distanceSq(getX(), getY(), newX, yClosestPoint) <= margin * margin) {
+          setX(newX);
+          setY(yClosestPoint);
+          return;
+        }
+      }
+      if (deltaYToClosestPoint != Float.POSITIVE_INFINITY && beta != Double.POSITIVE_INFINITY) {
+        float newY = (float)(alpha * xClosestPoint + beta);
+        if (Point2D.distanceSq(getX(), getY(), xClosestPoint, newY) <= margin * margin) {
+          setX(xClosestPoint);
+          setY(newY);
+        }
+      }
+    }
+  }
+
+  /**
    * A point with coordinates computed with angle and room points magnetism.
    */
   private class RoomPointWithAngleMagnetism extends PointWithAngleMagnetism {
@@ -15476,6 +15541,17 @@ public class PlanController extends FurnitureController implements Controller {
             this.xPreviousPoint, this.yPreviousPoint, x, y, preferences.getLengthUnit(), planView.getPixelLength());
         xEnd = pointWithAngleMagnetism.getX();
         yEnd = pointWithAngleMagnetism.getY();
+      }
+
+      // 2. Replicate wall-style coordinate alignment for polylines.
+      // When magnetism is enabled (and explicit angle alignment isn't being
+      // used), align the current endpoint with an existing polyline vertex on
+      // the same imaginary X/Y line. This is the source of the dotted
+      // alignment guide behavior used for walls.
+      if (!this.alignmentActivated && this.magnetismEnabled) {
+        PolylinePointWithAngleMagnetism point = new PolylinePointWithAngleMagnetism(
+        this.newPolyline,this.xPreviousPoint, this.yPreviousPoint, x, y);
+        xEnd = point.getX(); yEnd = point.getY();
       }
 
       // 3. Always detect geometric snap targets for visual feedback.
