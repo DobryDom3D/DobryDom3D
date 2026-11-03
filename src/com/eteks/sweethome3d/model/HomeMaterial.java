@@ -34,13 +34,15 @@ public class HomeMaterial implements Serializable {
   private final Integer     color;
   private final HomeTexture texture;
   private final Float       shininess;
+  private final Float       transparency;
+  private final Float       reflection; // Added reflection field
 
   /**
    * Creates a material instance from parameters.
    * @since 4.0
    */
   public HomeMaterial(String name, Integer color, HomeTexture texture, Float shininess) {
-    this(name, null, color, texture, shininess);
+    this(name, null, color, texture, shininess, null, null);
   }
 
   /**
@@ -48,11 +50,47 @@ public class HomeMaterial implements Serializable {
    * @since 5.3
    */
   public HomeMaterial(String name, String key, Integer color, HomeTexture texture, Float shininess) {
+    this(name, key, color, texture, shininess, null, null);
+  }
+
+  /**
+   * Creates a material instance from parameters.
+   * @since 8.0
+   */
+  public HomeMaterial(String name, Integer color, HomeTexture texture, Float shininess, Float transparency) {
+    this(name, null, color, texture, shininess, transparency, null);
+  }
+
+  /**
+   * Creates a material instance from parameters.
+   * @since 8.0
+   */
+  public HomeMaterial(String name, String key, Integer color, HomeTexture texture, Float shininess,
+                      Float transparency) {
+    this(name, key, color, texture, shininess, transparency, null);
+  }
+
+  /**
+   * Creates a material instance from parameters.
+   * Supports the 6-parameter signature without the key.
+   */
+  public HomeMaterial(String name, Integer color, HomeTexture texture, Float shininess, 
+                      Float transparency, Float reflection) {
+    this(name, null, color, texture, shininess, transparency, reflection);
+  }
+
+  /**
+   * Master constructor to initialize all parameters.
+   */
+  public HomeMaterial(String name, String key, Integer color, HomeTexture texture, Float shininess,
+                      Float transparency, Float reflection) {
     this.name = name;
     this.key = key;
     this.color = color;
     this.texture = texture;
     this.shininess = shininess;
+    this.transparency = transparency;
+    this.reflection = reflection;
   }
 
   /**
@@ -103,6 +141,24 @@ public class HomeMaterial implements Serializable {
   }
 
   /**
+   * Returns the transparency of this material.
+   * @return a value between 0 (fully opaque) and 1 (fully transparent)
+   *         or <code>null</code> if material transparency is unchanged.
+   * @since 8.0
+   */
+  public Float getTransparency() {
+    return this.transparency;
+  }
+
+  /**
+   * Returns the reflection of this material.
+   * @return a value representing reflection or <code>null</code> if material reflection is unchanged.
+   */
+  public Float getReflection() {
+    return this.reflection;
+  }
+
+  /**
    * Returns <code>true</code> if this material is equal to <code>object</code>.
    * @since 6.0
    */
@@ -119,7 +175,11 @@ public class HomeMaterial implements Serializable {
           && (material.texture == this.texture
               || (material.texture != null && material.texture.equals(this.texture)))
           && (material.shininess == this.shininess
-              || (material.shininess != null && material.shininess.equals(this.shininess)));
+              || (material.shininess != null && material.shininess.equals(this.shininess)))
+          && (material.transparency == this.transparency
+              || (material.transparency != null && material.transparency.equals(this.transparency)))
+          && (material.reflection == this.reflection
+              || (material.reflection != null && material.reflection.equals(this.reflection)));
     }
     return false;
   }
@@ -145,6 +205,12 @@ public class HomeMaterial implements Serializable {
     }
     if (this.shininess != null) {
       hashCode += this.shininess.hashCode();
+    }
+    if (this.transparency != null) {
+      hashCode += this.transparency.hashCode();
+    }
+    if (this.reflection != null) {
+      hashCode += this.reflection.hashCode();
     }
     return hashCode;
   }
