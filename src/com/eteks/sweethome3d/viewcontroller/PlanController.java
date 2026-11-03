@@ -12730,6 +12730,158 @@ public class PlanController extends FurnitureController implements Controller {
   private class DimensionLineCreationState extends AbstractModeChangeState {
     private boolean magnetismEnabled;
 
+    /**
+     * Mathematical helper to find the intersection of two line segments.
+     */
+    private float [] getSegmentIntersection(float x1, float y1, float x2, float y2, float x3, float y3, float x4,
+                                            float y4) {
+      float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+      if (denominator == 0) {
+        return null;
+      }
+
+      float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+      float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        float intersectX = x1 + t * (x2 - x1);
+        float intersectY = y1 + t * (y2 - y1);
+        return new float [] {intersectX, intersectY};
+      }
+
+      return null;
+    }
+
+    /**
+     * Magnetism helper method to find the closest endpoint of Polylines,
+     * intersections between Polylines, and both base & offset endpoints of
+     * DimensionLines.
+     */
+    private float [] getClosestEndpoint(float x, float y, float margin) {
+      float closestDistance = margin;
+      float [] snappedPoint = new float [] {x, y};
+
+      // 1. Check DimensionLines (Base points AND Offset main lines)
+      for (DimensionLine dimLine : home.getDimensionLines()) {
+        float startX = dimLine.getXStart();
+        float startY = dimLine.getYStart();
+        float endX = dimLine.getXEnd();
+        float endY = dimLine.getYEnd();
+
+        // Evaluate base start point
+        float d1 = (float)Math.hypot(x - startX, y - startY);
+        if (d1 < closestDistance) {
+          closestDistance = d1;
+          snappedPoint [0] = startX;
+          snappedPoint [1] = startY;
+        }
+
+        // Evaluate base end point
+        float d2 = (float)Math.hypot(x - endX, y - endY);
+        if (d2 < closestDistance) {
+          closestDistance = d2;
+          snappedPoint [0] = endX;
+          snappedPoint [1] = endY;
+        }
+
+        // Evaluate the offset "main line" endpoints
+        float offset = dimLine.getOffset();
+        float len = dimLine.getLength();
+        if (offset != 0 && len > 0) {
+          float dx = endX - startX;
+          float dy = endY - startY;
+
+          float offStartX = startX + (dy / len) * offset;
+          float offStartY = startY - (dx / len) * offset;
+          float offEndX = endX + (dy / len) * offset;
+          float offEndY = endY - (dx / len) * offset;
+
+          float d3 = (float)Math.hypot(x - offStartX, y - offStartY);
+          if (d3 < closestDistance) {
+            closestDistance = d3;
+            snappedPoint [0] = offStartX;
+            snappedPoint [1] = offStartY;
+          }
+
+          float d4 = (float)Math.hypot(x - offEndX, y - offEndY);
+          if (d4 < closestDistance) {
+            closestDistance = d4;
+            snappedPoint [0] = offEndX;
+            snappedPoint [1] = offEndY;
+          }
+        }
+      }
+
+      List<Polyline> polylines = home.getPolylines();
+
+      // 2. Check ALL Polyline Endpoints (Vertices)
+      for (Polyline polyline : polylines) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 0) {
+          for (int i = 0; i < points.length; i++) {
+            float dPoint = (float)Math.hypot(x - points [i] [0], y - points [i] [1]);
+            if (dPoint < closestDistance) {
+              closestDistance = dPoint;
+              snappedPoint [0] = points [i] [0];
+              snappedPoint [1] = points [i] [1];
+            }
+          }
+        }
+      }
+
+      // 3. Check Polyline Intersections
+      for (int i = 0; i < polylines.size(); i++) {
+        float [] [] pointsA = polylines.get(i).getPoints();
+        if (pointsA == null || pointsA.length < 2)
+          continue;
+
+        for (int j = i + 1; j < polylines.size(); j++) {
+          float [] [] pointsB = polylines.get(j).getPoints();
+          if (pointsB == null || pointsB.length < 2)
+            continue;
+
+          for (int a = 0; a < pointsA.length - 1; a++) {
+            for (int b = 0; b < pointsB.length - 1; b++) {
+              float [] intersection = getSegmentIntersection(pointsA [a] [0], pointsA [a] [1], pointsA [a + 1] [0],
+                  pointsA [a + 1] [1], pointsB [b] [0], pointsB [b] [1], pointsB [b + 1] [0], pointsB [b + 1] [1]);
+
+              if (intersection != null) {
+                float dIntersect = (float)Math.hypot(x - intersection [0], y - intersection [1]);
+                if (dIntersect < closestDistance) {
+                  closestDistance = dIntersect;
+                  snappedPoint [0] = intersection [0];
+                  snappedPoint [1] = intersection [1];
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return snappedPoint;
+    }
+
+    /* Helper to detect Polyline segments for hover preview and double-click. */
+
+    private DimensionLine getPolylineSegmentDimensionLineAt(float x, float y, float margin) {
+      for (Polyline polyline : home.getPolylines()) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 1) {
+          for (int i = 0; i < points.length - 1; i++) {
+            float x1 = points [i] [0];
+            float y1 = points [i] [1];
+            float x2 = points [i + 1] [0];
+            float y2 = points [i + 1] [1];
+            if (Line2D.ptSegDist(x1, y1, x2, y2, x, y) <= margin) {
+              return new DimensionLine(x1, y1, x2, y2, 0);
+            }
+          }
+        }
+      }
+      return null;
+    }
+
     @Override
     public Mode getMode() {
       return Mode.DIMENSION_LINE_CREATION;
@@ -12743,9 +12895,23 @@ public class PlanController extends FurnitureController implements Controller {
 
     @Override
     public void moveMouse(float x, float y) {
+      // Intercept and snap the raw mouse coordinates first
+      if (this.magnetismEnabled) {
+        float margin = getView().getPixelLength() * 6f;
+        float [] snapped = getClosestEndpoint(x, y, margin);
+        x = snapped [0];
+        y = snapped [1];
+      }
+
       if (feedbackDisplayed) {
+        // Draw feedback using the snapped coordinates
         getView().setAlignmentFeedback(DimensionLine.class, null, x, y, false);
         DimensionLine dimensionLine = getMeasuringDimensionLineAt(x, y, this.magnetismEnabled);
+        // Fallback to polyline segments if no standard dimension line was found
+        if (dimensionLine == null) {
+          float margin = getView().getPixelLength() * 6f;
+          dimensionLine = getPolylineSegmentDimensionLineAt(x, y, margin);
+        }
         if (dimensionLine != null) {
           getView().setDimensionLinesFeedback(Arrays.asList(new DimensionLine [] {dimensionLine}));
         } else {
@@ -12757,6 +12923,15 @@ public class PlanController extends FurnitureController implements Controller {
     @Override
     public void pressMouse(float x, float y, int clickCount,
                            boolean shiftDown, boolean duplicationActivated) {
+      // Apply the same snap logic here so the click precisely registers the
+      // snapped coordinates
+      if (this.magnetismEnabled) {
+        float margin = getView().getPixelLength() * 6f;
+        float [] snapped = getClosestEndpoint(x, y, margin);
+        x = snapped [0];
+        y = snapped [1];
+      }
+
       // Ignore double clicks (may happen when state is activated returning from DimensionLineDrawingState)
       if (clickCount == 1) {
         if (wasDuplicationActivatedLastMousePress()) {
@@ -12808,6 +12983,209 @@ public class PlanController extends FurnitureController implements Controller {
     private boolean          alignmentActivated;
     private boolean          offsetChoice;
 
+    /**
+     * Mathematical helper to find the intersection of two line segments.
+     * Calculates the vector intersection using Bezier parameters (t, u).
+     * Returns the [x, y] coordinates if they intersect, or null if they do not.
+     */
+    private float [] getSegmentIntersection(float x1, float y1, float x2, float y2, float x3, float y3, float x4,
+                                            float y4) {
+      float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+      // If the denominator is 0, the line segments are strictly parallel or
+      // coincident
+      if (denominator == 0) {
+        return null;
+      }
+
+      float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+      float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+      // Ensure the theoretical intersection point lies within the physical
+      // bounds of both segments
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        float intersectX = x1 + t * (x2 - x1);
+        float intersectY = y1 + t * (y2 - y1);
+        return new float [] {intersectX, intersectY};
+      }
+
+      return null;
+    }
+
+    /**
+     * Magnetism helper method to find the closest endpoint of Polylines,
+     * midpoints of Polyline segments, intersections between Polylines, and
+     * endpoints/segments of DimensionLines.
+     */
+    private float [] getClosestEndpoint(float x, float y, float margin) {
+      float closestDistance = margin;
+      float [] snappedPoint = new float [] {x, y};
+
+      // 1. Check DimensionLines
+      for (DimensionLine dimLine : home.getDimensionLines()) {
+        // Skip checking the currently active/drawn dimension line
+        // NOTE: In Resize/Offset states, change 'this.newDimensionLine' to
+        // 'this.selectedDimensionLine'
+        if (dimLine == this.newDimensionLine) {
+          continue;
+        }
+
+        // Evaluate start point
+        float d1 = (float)Math.hypot(x - dimLine.getXStart(), y - dimLine.getYStart());
+        if (d1 < closestDistance) {
+          closestDistance = d1;
+          snappedPoint [0] = dimLine.getXStart();
+          snappedPoint [1] = dimLine.getYStart();
+        }
+
+        // Evaluate end point
+        float d2 = (float)Math.hypot(x - dimLine.getXEnd(), y - dimLine.getYEnd());
+        if (d2 < closestDistance) {
+          closestDistance = d2;
+          snappedPoint [0] = dimLine.getXEnd();
+          snappedPoint [1] = dimLine.getYEnd();
+        }
+
+        // Evaluate the offset "main line" endpoints and segment
+        float offset = dimLine.getOffset();
+        float len = dimLine.getLength();
+        if (len > 0) {
+          float dx = dimLine.getXEnd() - dimLine.getXStart();
+          float dy = dimLine.getYEnd() - dimLine.getYStart();
+
+          // World-space offset direction must match how PlanComponent actually
+          // renders the offset line (translate to base point, rotate by the
+          // line's angle, then translate(0, offset) in the rotated frame):
+          // offsetX = baseX - offset * sin(angle) = baseX - offset * (dy/len)
+          // offsetY = baseY + offset * cos(angle) = baseY + offset * (dx/len)
+          // The previous +/- signs here were flipped, which mirrored the
+          // computed "main line" onto the opposite side of the base line from
+          // where it is actually drawn - so proximity could be detected near
+          // the phantom mirrored segment, but the snap target never matched
+          // the real, visible line.
+          float offStartX = dimLine.getXStart() - (dy / len) * offset;
+          float offStartY = dimLine.getYStart() + (dx / len) * offset;
+          float offEndX = dimLine.getXEnd() - (dy / len) * offset;
+          float offEndY = dimLine.getYEnd() + (dx / len) * offset;
+
+          // Check segment proximity to allow snapping anywhere along the main
+          // line
+          float dSegment = (float)Line2D.ptSegDist(offStartX, offStartY, offEndX, offEndY, x, y);
+          if (dSegment < closestDistance) {
+            closestDistance = dSegment;
+            // Project the cursor coordinates onto the line segment to find the
+            // snapped point
+            float t = ((x - offStartX) * dx + (y - offStartY) * dy) / (len * len);
+            t = Math.max(0, Math.min(1, t));
+            snappedPoint [0] = offStartX + t * dx;
+            snappedPoint [1] = offStartY + t * dy;
+          }
+
+          // Retain endpoint checks if the offset isn't zero
+          if (offset != 0) {
+            float d3 = (float)Math.hypot(x - offStartX, y - offStartY);
+            if (d3 < closestDistance) {
+              closestDistance = d3;
+              snappedPoint [0] = offStartX;
+              snappedPoint [1] = offStartY;
+            }
+
+            float d4 = (float)Math.hypot(x - offEndX, y - offEndY);
+            if (d4 < closestDistance) {
+              closestDistance = d4;
+              snappedPoint [0] = offEndX;
+              snappedPoint [1] = offEndY;
+            }
+          }
+        }
+      }
+
+      List<Polyline> polylines = home.getPolylines();
+
+      // 2. Check ALL Polyline Endpoints (Vertices) AND Midpoints
+      for (Polyline polyline : polylines) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 0) {
+          for (int i = 0; i < points.length; i++) {
+            // Check Endpoint
+            float dPoint = (float)Math.hypot(x - points [i] [0], y - points [i] [1]);
+            if (dPoint < closestDistance) {
+              closestDistance = dPoint;
+              snappedPoint [0] = points [i] [0];
+              snappedPoint [1] = points [i] [1];
+            }
+
+            // Check Midpoint of the segment (if not the last point)
+            if (i < points.length - 1) {
+              float midX = (points [i] [0] + points [i + 1] [0]) / 2.0f;
+              float midY = (points [i] [1] + points [i + 1] [1]) / 2.0f;
+
+              float dMidpoint = (float)Math.hypot(x - midX, y - midY);
+              if (dMidpoint < closestDistance) {
+                closestDistance = dMidpoint;
+                snappedPoint [0] = midX;
+                snappedPoint [1] = midY;
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Check Polyline Intersections
+      for (int i = 0; i < polylines.size(); i++) {
+        float [] [] pointsA = polylines.get(i).getPoints();
+        if (pointsA == null || pointsA.length < 2)
+          continue;
+
+        for (int j = i + 1; j < polylines.size(); j++) {
+          float [] [] pointsB = polylines.get(j).getPoints();
+          if (pointsB == null || pointsB.length < 2)
+            continue;
+
+          // Iterate over segments of Polyline A
+          for (int a = 0; a < pointsA.length - 1; a++) {
+            // Iterate over segments of Polyline B
+            for (int b = 0; b < pointsB.length - 1; b++) {
+              float [] intersection = getSegmentIntersection(pointsA [a] [0], pointsA [a] [1], pointsA [a + 1] [0],
+                  pointsA [a + 1] [1], pointsB [b] [0], pointsB [b] [1], pointsB [b + 1] [0], pointsB [b + 1] [1]);
+
+              if (intersection != null) {
+                float dIntersect = (float)Math.hypot(x - intersection [0], y - intersection [1]);
+                if (dIntersect < closestDistance) {
+                  closestDistance = dIntersect;
+                  snappedPoint [0] = intersection [0];
+                  snappedPoint [1] = intersection [1];
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return snappedPoint;
+    }
+
+    /**
+     * Helper to detect Polyline segments for hover preview and double-click.
+     */
+    private DimensionLine getPolylineSegmentDimensionLineAt(float x, float y, float margin) {
+      for (Polyline polyline : home.getPolylines()) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 1) {
+          for (int i = 0; i < points.length - 1; i++) {
+            float x1 = points [i] [0];
+            float y1 = points [i] [1];
+            float x2 = points [i + 1] [0];
+            float y2 = points [i + 1] [1];
+            if (Line2D.ptSegDist(x1, y1, x2, y2, x, y) <= margin) {
+              return new DimensionLine(x1, y1, x2, y2, 0);
+            }
+          }
+        }
+      }
+      return null;
+    }
+
     @Override
     public Mode getMode() {
       return Mode.DIMENSION_LINE_CREATION;
@@ -12855,14 +13233,30 @@ public class PlanController extends FurnitureController implements Controller {
       deselectAll();
       this.alignmentActivated = wasAlignmentActivatedLastMousePress();
       toggleMagnetism(wasMagnetismToggledLastMousePress());
-      DimensionLine dimensionLine = getMeasuringDimensionLineAt(
-          getXLastMousePress(), getYLastMousePress(), this.magnetismEnabled);
+
+      // 1. Calculate the snap
+      if (this.magnetismEnabled) {
+        float margin = getView().getPixelLength() * 6f;
+        float [] snapped = getClosestEndpoint(this.xStart, this.yStart, margin);
+        this.xStart = snapped [0];
+        this.yStart = snapped [1];
+      }
+
+      // 2. Use the SNAPPED coordinates (xStart, yStart) for the measuring check
+      DimensionLine dimensionLine = getMeasuringDimensionLineAt(this.xStart, this.yStart, this.magnetismEnabled);
+
+      // Fallback to polyline segments
+      if(dimensionLine == null) {
+        float margin = getView().getPixelLength() * 6f;
+        dimensionLine = getPolylineSegmentDimensionLineAt(this.xStart, this.yStart, margin);
+      }
       if (feedbackDisplayed) {
         if (dimensionLine != null) {
           getView().setDimensionLinesFeedback(Arrays.asList(new DimensionLine [] {dimensionLine}));
         }
+        // 3. FIXED: Tell the indicator to draw at the SNAPPED coordinates!
         getView().setAlignmentFeedback(DimensionLine.class,
-            null, getXLastMousePress(), getYLastMousePress(), false);
+            null, this.xStart, this.yStart, false);
       }
     }
 
@@ -12871,6 +13265,15 @@ public class PlanController extends FurnitureController implements Controller {
       PlanView planView = getView();
       planView.deleteFeedback();
       if (this.offsetChoice) {
+
+        // Intercept and snap the raw mouse coordinates during offset selection
+        if (this.magnetismEnabled) {
+          float margin = planView.getPixelLength() * 6f;
+          float [] snapped = getClosestEndpoint(x, y, margin);
+          x = snapped [0];
+          y = snapped [1];
+        }
+
           float distanceToDimensionLine = (float)Line2D.ptLineDist(
               this.newDimensionLine.getXStart(), this.newDimensionLine.getYStart(),
               this.newDimensionLine.getXEnd(), this.newDimensionLine.getYEnd(), x, y);
@@ -12892,6 +13295,15 @@ public class PlanController extends FurnitureController implements Controller {
               preferences.getLengthUnit(), planView.getPixelLength());
           newX = point.getX();
           newY = point.getY();
+
+          // Snap the moving end point to a nearby endpoint if magnetism is
+          // enabled
+          if (this.magnetismEnabled) {
+            float margin = planView.getPixelLength() * 6f;
+            float [] snapped = getClosestEndpoint(newX, newY, margin);
+            newX = snapped [0];
+            newY = snapped [1];
+          }
         } else {
           newX = x;
           newY = y;
@@ -12957,6 +13369,12 @@ public class PlanController extends FurnitureController implements Controller {
           && clickCount == 2) {
         // Try to guess the item to measure
         DimensionLine dimensionLine = getMeasuringDimensionLineAt(x, y, this.magnetismEnabled);
+
+        // Support double-click instant creation on Polyline segments
+        if (dimensionLine == null) {
+          float margin = getView().getPixelLength() * 6f;
+          dimensionLine = getPolylineSegmentDimensionLineAt(x, y, margin);
+        }
         if (dimensionLine != null) {
           this.newDimensionLine = createDimensionLine(
               dimensionLine.getXStart(), dimensionLine.getYStart(),
@@ -13191,6 +13609,185 @@ public class PlanController extends FurnitureController implements Controller {
     private boolean       magnetismEnabled;
     private boolean       alignmentActivated;
 
+    /**
+     * Mathematical helper to find the intersection of two line segments.
+     * Calculates the vector intersection using Bezier parameters (t, u).
+     * Returns the [x, y] coordinates if they intersect, or null if they do not.
+     */
+    private float [] getSegmentIntersection(float x1, float y1, float x2, float y2, float x3, float y3, float x4,
+                                            float y4) {
+      float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+      // If the denominator is 0, the line segments are strictly parallel or
+      // coincident
+      if (denominator == 0) {
+        return null;
+      }
+
+      float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+      float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+      // Ensure the theoretical intersection point lies within the physical
+      // bounds of both segments
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        float intersectX = x1 + t * (x2 - x1);
+        float intersectY = y1 + t * (y2 - y1);
+        return new float [] {intersectX, intersectY};
+      }
+
+      return null;
+    }
+
+    /**
+     * Magnetism helper method to find the closest endpoint of Polylines,
+     * midpoints of Polyline segments, intersections between Polylines, and
+     * endpoints/segments of DimensionLines.
+     */
+    private float [] getClosestEndpoint(float x, float y, float margin) {
+      float closestDistance = margin;
+      float [] snappedPoint = new float [] {x, y};
+
+      // 1. Check DimensionLines
+      for (DimensionLine dimLine : home.getDimensionLines()) {
+        // Skip checking the currently active/resized/offsetting dimension line
+        if (dimLine == this.selectedDimensionLine) {
+          continue;
+        }
+
+        // Evaluate start point
+        float d1 = (float)Math.hypot(x - dimLine.getXStart(), y - dimLine.getYStart());
+        if (d1 < closestDistance) {
+          closestDistance = d1;
+          snappedPoint [0] = dimLine.getXStart();
+          snappedPoint [1] = dimLine.getYStart();
+        }
+
+        // Evaluate end point
+        float d2 = (float)Math.hypot(x - dimLine.getXEnd(), y - dimLine.getYEnd());
+        if (d2 < closestDistance) {
+          closestDistance = d2;
+          snappedPoint [0] = dimLine.getXEnd();
+          snappedPoint [1] = dimLine.getYEnd();
+        }
+
+        // Evaluate the offset "main line" endpoints and segment
+        float offset = dimLine.getOffset();
+        float len = dimLine.getLength();
+        if (len > 0) {
+          float dx = dimLine.getXEnd() - dimLine.getXStart();
+          float dy = dimLine.getYEnd() - dimLine.getYStart();
+
+          // World-space offset direction must match how PlanComponent actually
+          // renders the offset line (translate to base point, rotate by the
+          // line's angle, then translate(0, offset) in the rotated frame):
+          // offsetX = baseX - offset * sin(angle) = baseX - offset * (dy/len)
+          // offsetY = baseY + offset * cos(angle) = baseY + offset * (dx/len)
+          // The previous +/- signs here were flipped, which mirrored the
+          // computed "main line" onto the opposite side of the base line from
+          // where it is actually drawn - so proximity could be detected near
+          // the phantom mirrored segment, but the snap target never matched
+          // the real, visible line.
+          float offStartX = dimLine.getXStart() - (dy / len) * offset;
+          float offStartY = dimLine.getYStart() + (dx / len) * offset;
+          float offEndX = dimLine.getXEnd() - (dy / len) * offset;
+          float offEndY = dimLine.getYEnd() + (dx / len) * offset;
+
+          // Check segment proximity to allow snapping anywhere along the main
+          // line
+          float dSegment = (float)Line2D.ptSegDist(offStartX, offStartY, offEndX, offEndY, x, y);
+          if (dSegment < closestDistance) {
+            closestDistance = dSegment;
+            // Project the cursor coordinates onto the line segment to find the
+            // snapped point
+            float t = ((x - offStartX) * dx + (y - offStartY) * dy) / (len * len);
+            t = Math.max(0, Math.min(1, t));
+            snappedPoint [0] = offStartX + t * dx;
+            snappedPoint [1] = offStartY + t * dy;
+          }
+
+          // Retain endpoint checks if the offset isn't zero
+          if (offset != 0) {
+            float d3 = (float)Math.hypot(x - offStartX, y - offStartY);
+            if (d3 < closestDistance) {
+              closestDistance = d3;
+              snappedPoint [0] = offStartX;
+              snappedPoint [1] = offStartY;
+            }
+
+            float d4 = (float)Math.hypot(x - offEndX, y - offEndY);
+            if (d4 < closestDistance) {
+              closestDistance = d4;
+              snappedPoint [0] = offEndX;
+              snappedPoint [1] = offEndY;
+            }
+          }
+        }
+      }
+
+      List<Polyline> polylines = home.getPolylines();
+
+      // 2. Check ALL Polyline Endpoints (Vertices) AND Midpoints
+      for (Polyline polyline : polylines) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 0) {
+          for (int i = 0; i < points.length; i++) {
+            // Check Endpoint
+            float dPoint = (float)Math.hypot(x - points [i] [0], y - points [i] [1]);
+            if (dPoint < closestDistance) {
+              closestDistance = dPoint;
+              snappedPoint [0] = points [i] [0];
+              snappedPoint [1] = points [i] [1];
+            }
+
+            // Check Midpoint of the segment (if not the last point)
+            if (i < points.length - 1) {
+              float midX = (points [i] [0] + points [i + 1] [0]) / 2.0f;
+              float midY = (points [i] [1] + points [i + 1] [1]) / 2.0f;
+
+              float dMidpoint = (float)Math.hypot(x - midX, y - midY);
+              if (dMidpoint < closestDistance) {
+                closestDistance = dMidpoint;
+                snappedPoint [0] = midX;
+                snappedPoint [1] = midY;
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Check Polyline Intersections
+      for (int i = 0; i < polylines.size(); i++) {
+        float [] [] pointsA = polylines.get(i).getPoints();
+        if (pointsA == null || pointsA.length < 2)
+          continue;
+
+        for (int j = i + 1; j < polylines.size(); j++) {
+          float [] [] pointsB = polylines.get(j).getPoints();
+          if (pointsB == null || pointsB.length < 2)
+            continue;
+
+          // Iterate over segments of Polyline A
+          for (int a = 0; a < pointsA.length - 1; a++) {
+            // Iterate over segments of Polyline B
+            for (int b = 0; b < pointsB.length - 1; b++) {
+              float [] intersection = getSegmentIntersection(pointsA [a] [0], pointsA [a] [1], pointsA [a + 1] [0],
+                  pointsA [a + 1] [1], pointsB [b] [0], pointsB [b] [1], pointsB [b + 1] [0], pointsB [b + 1] [1]);
+
+              if (intersection != null) {
+                float dIntersect = (float)Math.hypot(x - intersection [0], y - intersection [1]);
+                if (dIntersect < closestDistance) {
+                  closestDistance = dIntersect;
+                  snappedPoint [0] = intersection [0];
+                  snappedPoint [1] = intersection [1];
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return snappedPoint;
+    }
 
     @Override
     public Mode getMode() {
@@ -13316,6 +13913,15 @@ public class PlanController extends FurnitureController implements Controller {
                 preferences.getLengthUnit(), planView.getPixelLength());
             xNewStartPoint = point.getX();
             yNewStartPoint = point.getY();
+
+            // Magnetism: Snap the moving start point to a nearby endpoint if
+            // magnetism is enabled
+            if (this.magnetismEnabled) {
+              float margin = planView.getPixelLength() * 6f;
+              float [] snapped = getClosestEndpoint(xNewStartPoint, yNewStartPoint, margin);
+              xNewStartPoint = snapped [0];
+              yNewStartPoint = snapped [1];
+            }
           }
 
           moveDimensionLinePoint(this.selectedDimensionLine, xNewStartPoint, yNewStartPoint, this.editingStartPoint);
@@ -13358,6 +13964,15 @@ public class PlanController extends FurnitureController implements Controller {
                 preferences.getLengthUnit(), planView.getPixelLength());
             xNewEndPoint = point.getX();
             yNewEndPoint = point.getY();
+
+            // Magnetism: Snap the moving end point to a nearby endpoint if
+            // magnetism is enabled
+            if (this.magnetismEnabled) {
+              float margin = planView.getPixelLength() * 6f;
+              float [] snapped = getClosestEndpoint(xNewEndPoint, yNewEndPoint, margin);
+              xNewEndPoint = snapped [0];
+              yNewEndPoint = snapped [1];
+            }
           }
 
           moveDimensionLinePoint(this.selectedDimensionLine, xNewEndPoint, yNewEndPoint, this.editingStartPoint);
@@ -13445,6 +14060,187 @@ public class PlanController extends FurnitureController implements Controller {
     private float         oldOffset;
     private float         deltaXToOffsetPoint;
     private float         deltaYToOffsetPoint;
+    private boolean       magnetismEnabled;
+
+    /**
+     * Mathematical helper to find the intersection of two line segments.
+     * Calculates the vector intersection using Bezier parameters (t, u).
+     * Returns the [x, y] coordinates if they intersect, or null if they do not.
+     */
+    private float [] getSegmentIntersection(float x1, float y1, float x2, float y2, float x3, float y3, float x4,
+                                            float y4) {
+      float denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+      // If the denominator is 0, the line segments are strictly parallel or
+      // coincident
+      if (denominator == 0) {
+        return null;
+      }
+
+      float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denominator;
+      float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denominator;
+
+      // Ensure the theoretical intersection point lies within the physical
+      // bounds of both segments
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        float intersectX = x1 + t * (x2 - x1);
+        float intersectY = y1 + t * (y2 - y1);
+        return new float [] {intersectX, intersectY};
+      }
+
+      return null;
+    }
+
+    /**
+     * Magnetism helper method to find the closest endpoint of Polylines,
+     * midpoints of Polyline segments, intersections between Polylines, and
+     * endpoints/segments of DimensionLines.
+     */
+    private float [] getClosestEndpoint(float x, float y, float margin) {
+      float closestDistance = margin;
+      float [] snappedPoint = new float [] {x, y};
+
+      // 1. Check DimensionLines
+      for (DimensionLine dimLine : home.getDimensionLines()) {
+        // Skip checking the currently active/resized/offsetting dimension line
+        if (dimLine == this.selectedDimensionLine) {
+          continue;
+        }
+
+        // Evaluate start point
+        float d1 = (float)Math.hypot(x - dimLine.getXStart(), y - dimLine.getYStart());
+        if (d1 < closestDistance) {
+          closestDistance = d1;
+          snappedPoint [0] = dimLine.getXStart();
+          snappedPoint [1] = dimLine.getYStart();
+        }
+
+        // Evaluate end point
+        float d2 = (float)Math.hypot(x - dimLine.getXEnd(), y - dimLine.getYEnd());
+        if (d2 < closestDistance) {
+          closestDistance = d2;
+          snappedPoint [0] = dimLine.getXEnd();
+          snappedPoint [1] = dimLine.getYEnd();
+        }
+
+        // Evaluate the offset "main line" endpoints and segment
+        float offset = dimLine.getOffset();
+        float len = dimLine.getLength();
+        if (len > 0) {
+          float dx = dimLine.getXEnd() - dimLine.getXStart();
+          float dy = dimLine.getYEnd() - dimLine.getYStart();
+
+          // World-space offset direction must match how PlanComponent actually
+          // renders the offset line (translate to base point, rotate by the
+          // line's angle, then translate(0, offset) in the rotated frame):
+          // offsetX = baseX - offset * sin(angle) = baseX - offset * (dy/len)
+          // offsetY = baseY + offset * cos(angle) = baseY + offset * (dx/len)
+          // The previous +/- signs here were flipped, which mirrored the
+          // computed "main line" onto the opposite side of the base line from
+          // where it is actually drawn - so proximity could be detected near
+          // the phantom mirrored segment, but the snap target never matched
+          // the real, visible line.
+          float offStartX = dimLine.getXStart() - (dy / len) * offset;
+          float offStartY = dimLine.getYStart() + (dx / len) * offset;
+          float offEndX = dimLine.getXEnd() - (dy / len) * offset;
+          float offEndY = dimLine.getYEnd() + (dx / len) * offset;
+
+          // Check segment proximity to allow snapping anywhere along the main
+          // line
+          float dSegment = (float)Line2D.ptSegDist(offStartX, offStartY, offEndX, offEndY, x, y);
+          if (dSegment < closestDistance) {
+            closestDistance = dSegment;
+            // Project the cursor coordinates onto the line segment to find the
+            // snapped point
+            float t = ((x - offStartX) * dx + (y - offStartY) * dy) / (len * len);
+            t = Math.max(0, Math.min(1, t));
+            snappedPoint [0] = offStartX + t * dx;
+            snappedPoint [1] = offStartY + t * dy;
+          }
+
+          // Retain endpoint checks if the offset isn't zero
+          if (offset != 0) {
+            float d3 = (float)Math.hypot(x - offStartX, y - offStartY);
+            if (d3 < closestDistance) {
+              closestDistance = d3;
+              snappedPoint [0] = offStartX;
+              snappedPoint [1] = offStartY;
+            }
+
+            float d4 = (float)Math.hypot(x - offEndX, y - offEndY);
+            if (d4 < closestDistance) {
+              closestDistance = d4;
+              snappedPoint [0] = offEndX;
+              snappedPoint [1] = offEndY;
+            }
+          }
+        }
+      }
+
+      List<Polyline> polylines = home.getPolylines();
+
+      // 2. Check ALL Polyline Endpoints (Vertices) AND Midpoints
+      for (Polyline polyline : polylines) {
+        float [] [] points = polyline.getPoints();
+        if (points != null && points.length > 0) {
+          for (int i = 0; i < points.length; i++) {
+            // Check Endpoint
+            float dPoint = (float)Math.hypot(x - points [i] [0], y - points [i] [1]);
+            if (dPoint < closestDistance) {
+              closestDistance = dPoint;
+              snappedPoint [0] = points [i] [0];
+              snappedPoint [1] = points [i] [1];
+            }
+
+            // Check Midpoint of the segment (if not the last point)
+            if (i < points.length - 1) {
+              float midX = (points [i] [0] + points [i + 1] [0]) / 2.0f;
+              float midY = (points [i] [1] + points [i + 1] [1]) / 2.0f;
+
+              float dMidpoint = (float)Math.hypot(x - midX, y - midY);
+              if (dMidpoint < closestDistance) {
+                closestDistance = dMidpoint;
+                snappedPoint [0] = midX;
+                snappedPoint [1] = midY;
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Check Polyline Intersections
+      for (int i = 0; i < polylines.size(); i++) {
+        float [] [] pointsA = polylines.get(i).getPoints();
+        if (pointsA == null || pointsA.length < 2)
+          continue;
+
+        for (int j = i + 1; j < polylines.size(); j++) {
+          float [] [] pointsB = polylines.get(j).getPoints();
+          if (pointsB == null || pointsB.length < 2)
+            continue;
+
+          // Iterate over segments of Polyline A
+          for (int a = 0; a < pointsA.length - 1; a++) {
+            // Iterate over segments of Polyline B
+            for (int b = 0; b < pointsB.length - 1; b++) {
+              float [] intersection = getSegmentIntersection(pointsA [a] [0], pointsA [a] [1], pointsA [a + 1] [0],
+                  pointsA [a + 1] [1], pointsB [b] [0], pointsB [b] [1], pointsB [b + 1] [0], pointsB [b + 1] [1]);
+
+              if (intersection != null) {
+                float dIntersect = (float)Math.hypot(x - intersection [0], y - intersection [1]);
+                if (dIntersect < closestDistance) {
+                  closestDistance = dIntersect;
+                  snappedPoint [0] = intersection [0];
+                  snappedPoint [1] = intersection [1];
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return snappedPoint;
+    }
 
     @Override
     public Mode getMode() {
@@ -13476,12 +14272,36 @@ public class PlanController extends FurnitureController implements Controller {
       this.deltaYToOffsetPoint = getYLastMousePress() - yMiddle;
       PlanView planView = getView();
       planView.setResizeIndicatorVisible(true);
+
+      toggleMagnetism(wasMagnetismToggledLastMousePress());
+    }
+
+    @Override
+    public void toggleMagnetism(boolean magnetismToggled) {
+      this.magnetismEnabled = preferences.isMagnetismEnabled() ^ magnetismToggled;
+      if (this.selectedDimensionLine != null) {
+        moveMouse(getXLastMouseMove(), getYLastMouseMove());
+      }
     }
 
     @Override
     public void moveMouse(float x, float y) {
+      // Compute the raw (unsnapped) position of the offset line's middle point
+      // first, then snap THAT point. Snapping the raw cursor position (x, y)
+      // and only afterwards subtracting the grab-point delta re-introduces the
+      // exact grab-offset error the snap was meant to remove, so the offset
+      // line would end up near another dimension line's main line but not
+      // exactly on it - the indicator would appear active without an actual
+      // snap taking effect.
       float newX = x - this.deltaXToOffsetPoint;
       float newY = y - this.deltaYToOffsetPoint;
+
+      if (this.magnetismEnabled) {
+        float margin = getView().getPixelLength() * 6f;
+        float [] snapped = getClosestEndpoint(newX, newY, margin);
+        newX = snapped [0];
+        newY = snapped [1];
+      }
 
       float distanceToDimensionLine;
       int relativeCCW;
@@ -13500,6 +14320,22 @@ public class PlanController extends FurnitureController implements Controller {
       }
       float newOffset;
       newOffset = -Math.signum(relativeCCW) * distanceToDimensionLine;
+
+      // Magnetism: snap the offset line back onto the dimension line's own
+      // main (base) line when the cursor is close enough to it.
+      // getClosestEndpoint()
+      // intentionally skips the dimension line currently being offset (see the
+      // "dimLine == this.selectedDimensionLine" check above), so it can never
+      // produce this particular snap on its own - that's why the resize
+      // indicator appeared near the main line but the offset never actually
+      // locked to 0.
+      if (this.magnetismEnabled) {
+        float margin = getView().getPixelLength() * 6f;
+        if (distanceToDimensionLine < margin) {
+          newOffset = 0;
+        }
+      }
+
       this.selectedDimensionLine.setOffset(newOffset);
 
       // Ensure point at (x,y) is visible
@@ -15852,6 +16688,67 @@ public class PlanController extends FurnitureController implements Controller {
     private String getToolTipFeedbackText(float angle) {
       return String.format(this.rotationToolTipFeedback, Math.round(Math.toDegrees(angle)));
     }
+  }
+
+  /**
+   * Adjusts the provided coordinates to snap to an existing dimension line if
+   * it falls within the controller's magnetism margin.
+   *
+   * @param currentLine The dimension line currently being drawn or resized (to
+   *          ignore itself)
+   * @param x The current un-magnetized X coordinate
+   * @param y The current un-magnetized Y coordinate
+   * @return A float array containing the [X, Y] snapped coordinates, or
+   *         original if no snap occurs.
+   */
+  protected float [] adjustMagnetizedDimensionLine(DimensionLine currentLine, float x, float y) {
+    if (!this.preferences.isMagnetismEnabled()) {
+      return new float [] {x, y};
+    }
+
+    float margin = INDICATOR_PIXEL_MARGIN / getScale();
+    float bestDistance = Float.MAX_VALUE;
+    float [] snappedPoint = new float [] {x, y};
+
+    // Iterate through existing dimension lines in the plan
+    for (DimensionLine dl : this.home.getDimensionLines()) {
+      if (dl == currentLine) {
+        continue; // Skip the line currently being manipulated
+      }
+
+      // Calculate the shortest distance from the cursor to the existing
+      // dimension line segment
+      double distToLine = Line2D.ptSegDist(dl.getXStart(), dl.getYStart(), dl.getXEnd(), dl.getYEnd(), x, y);
+
+      // If within the visual snapping margin, calculate the exact orthogonal
+      // snap point
+      if (distToLine < margin && distToLine < bestDistance) {
+        bestDistance = (float)distToLine;
+
+        // Calculate the vector of the existing line
+        float dx = dl.getXEnd() - dl.getXStart();
+        float dy = dl.getYEnd() - dl.getYStart();
+        float lineLengthSq = dx * dx + dy * dy;
+
+        if (lineLengthSq == 0) {
+          snappedPoint [0] = dl.getXStart();
+          snappedPoint [1] = dl.getYStart();
+        } else {
+          // Perform scalar projection to find the closest point on the line
+          // segment
+          float t = ((x - dl.getXStart()) * dx + (y - dl.getYStart()) * dy) / lineLengthSq;
+
+          // Clamp t to [0, 1] to ensure we snap to the segment, not just the
+          // infinite line
+          t = Math.max(0, Math.min(1, t));
+
+          snappedPoint [0] = dl.getXStart() + t * dx;
+          snappedPoint [1] = dl.getYStart() + t * dy;
+        }
+      }
+    }
+
+    return snappedPoint;
   }
 
   /**
