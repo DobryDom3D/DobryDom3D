@@ -222,7 +222,7 @@ public class BaseboardChoiceComponent extends JPanel implements View {
     this.thicknessLabel = new JLabel(SwingTools.getLocalizedLabelText(preferences,
         BaseboardChoiceComponent.class, "thicknessLabel.text", unitName));
     final NullableSpinner.NullableSpinnerLengthModel thicknessSpinnerModel =
-        new NullableSpinner.NullableSpinnerLengthModel(preferences, minimumLength, 2);
+        new NullableSpinner.NullableSpinnerLengthModel(preferences, minimumLength, 200);
     this.thicknessSpinner = new NullableSpinner(thicknessSpinnerModel);
     thicknessSpinnerModel.setNullable(controller.getThickness() == null);
     thicknessSpinnerModel.setLength(controller.getThickness());
