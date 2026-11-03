@@ -324,6 +324,27 @@ public class VideoController implements Controller {
       this.time = time;
       this.propertyChangeSupport.firePropertyChange(Property.TIME.name(), oldTime, time);
       this.home.getCamera().setTime(time);
+      // modification (Claude): propagate to every waypoint on the camera path,
+      // not just
+      // the first one. The video is meant to use a single date/time for the
+      // whole clip
+      // (not a per-waypoint timelapse), so editing the time here needs to reach
+      // every
+      // point - not just cameraPath.get(0) - or later points keep whatever
+      // stale time
+      // they had when recorded/added (e.g. brought in from an
+      // individually-saved camera
+      // with its own time), and that stale time both renders wrong and is what
+      // gets
+      // saved for those points.
+      List<Camera> cameraPath = this.home.getEnvironment().getVideoCameraPath();
+      if (!cameraPath.isEmpty()) {
+        cameraPath = new ArrayList<Camera>(cameraPath);
+        for (Camera pathCamera : cameraPath) {
+          pathCamera.setTime(time);
+        }
+        setCameraPath(cameraPath);
+      }
     }
   }
 
