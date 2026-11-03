@@ -155,7 +155,12 @@ public interface PlanView extends TransferableView, ExportableView {
                                             float x,
                                             float y,
                                             boolean showPoint);
-
+  
+  /**
+   * Sets the visual feedback for geometric snap markers.
+   * Pass null for snapType to clear the feedback.
+   */
+  public abstract void setSnapFeedback(PlanController.SnapType snapType, float x, float y);
 
   /**
    * Sets the points used to draw an angle in plan view.

@@ -568,6 +568,13 @@ public class MultipleLevelsPlanPanel extends JPanel implements PlanView, Printab
   public void setRectangleFeedback(float x0, float y0, float x1, float y1) {
     ((PlanView)this.planComponent).setRectangleFeedback(x0, y0, x1, y1);
   }
+  
+  /**
+   * Sets the snap feedback coordinates.
+   */
+  public void setSnapFeedback(PlanController.SnapType snapType, float x, float y) {
+    ((PlanView)this.planComponent).setSnapFeedback(snapType, x, y);
+  }
 
   /**
    * Ensures selected items are visible in the plan displayed by this component and moves
