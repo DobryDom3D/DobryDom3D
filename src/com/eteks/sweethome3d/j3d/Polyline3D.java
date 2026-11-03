@@ -240,6 +240,21 @@ public class Polyline3D extends Object3DBranch {
         case DISC :
           arrowPath.append(new Ellipse2D.Float(-3.5f, -2, 4, 4), false);
           break;
+        case HOLLOW_CIRCLE :
+          Shape circleShape = new Ellipse2D.Float(0f, -10f, 20f, 20f);
+          BasicStroke circleStroke = new BasicStroke((float)(thickness / scale), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
+          arrowPath.append(circleStroke.createStrokedShape(circleShape), false);
+          break;
+        case HOLLOW_RHOMBUS :
+          GeneralPath rhombus = new GeneralPath();
+          rhombus.moveTo(0, 0);
+          rhombus.lineTo(10, 10);
+          rhombus.lineTo(20, 0);
+          rhombus.lineTo(10, -10);
+          rhombus.closePath();
+          BasicStroke rhombusStroke = new BasicStroke((float)(thickness / scale), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
+          arrowPath.append(rhombusStroke.createStrokedShape(rhombus), false);
+          break;
         case OPEN :
           BasicStroke arrowStroke = new BasicStroke((float)(thickness / scale / 0.9), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
           arrowPath.append(arrowStroke.createStrokedShape(ARROW).getPathIterator(AffineTransform.getScaleInstance(0.9, 0.9), 0), false);

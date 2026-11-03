@@ -5328,6 +5328,22 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
           g2D.translate(1.65f, 0);
           g2D.fill(ARROW);
           break;
+        case HOLLOW_CIRCLE:
+          g2D.setStroke(new BasicStroke((float)(thickness / scale), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+          // Shifted outward: starts at x = 0, extends to x = 20
+          g2D.draw(new Ellipse2D.Float(0f, -10f, 20f, 20f));
+          break;
+        case HOLLOW_RHOMBUS:
+          g2D.setStroke(new BasicStroke((float)(thickness / scale), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+          GeneralPath rhombus = new GeneralPath();
+          // Shifted outward: base at (0,0), extends to x = 20
+          rhombus.moveTo(0, 0);
+          rhombus.lineTo(10, 10);
+          rhombus.lineTo(20, 0);
+          rhombus.lineTo(10, -10);
+          rhombus.closePath();
+          g2D.draw(rhombus);
+          break;
         default:
           break;
       }
