@@ -15130,19 +15130,16 @@ public class PlanController extends FurnitureController implements Controller {
 
       // If current polyline doesn't exist
       if (this.newPolyline == null) {
-        // Create a new one
         this.newPolyline = createAndSelectPolyline(this.xPreviousPoint, this.yPreviousPoint, xEnd, yEnd);
       } else if (this.newPoint != null) {
-        // Add a point to current polyline
-        float [][] points = this.newPolyline.getPoints();
-        this.xPreviousPoint = points [points.length - 1][0];
-        this.yPreviousPoint = points [points.length - 1][1];
+        // xPreviousPoint and yPreviousPoint were already updated above
         this.newPolyline.addPoint(xEnd, yEnd);
         this.newPoint [0] = xEnd;
         this.newPoint [1] = yEnd;
         this.newPoint = null;
       } else {
-        // Otherwise update its last point
+        // Restore/Update the actively drawn point to the correct calculated
+        // position
         this.newPolyline.setPoint(xEnd, yEnd, this.newPolyline.getPointCount() - 1);
       }
       if (feedbackDisplayed) {
@@ -15220,8 +15217,59 @@ public class PlanController extends FurnitureController implements Controller {
       // Create a new polyline segment only when its length is greater than zero
       if (this.newPolyline != null
           && getPolylineSegmentLength(this.newPolyline, this.newPolyline.getPointCount() - 1) > 0) {
-        this.newPoint = new float [2];
-        if (this.newPolyline.getPointCount() <= 2
+        // FIX: Commit the point immediately here, at click time, instead of
+        // only
+        // setting a pending flag (this.newPoint) and waiting for the NEXT
+        // moveMouse() call to actually invoke addPoint(). The old deferred
+        // approach
+        // meant a single click never really finished a vertex: the polyline's
+        // point
+        // count didn't change until the mouse physically moved again, so if the
+        // user clicked a second time before any intervening moveMouse() event
+        // fired
+        // (the normal case when two points are close together, or whenever the
+        // toolkit simply doesn't deliver a move event between two fast clicks),
+        // the
+        // still-pending commit was never turned into a real point - the
+        // press-time
+        // snap logic above just kept re-snapping the SAME last point over and
+        // over.
+        // That is why a snap only ever seemed to "stick" after a second click,
+        // and
+        // why continuous multi-segment polyline creation kept getting
+        // interrupted.
+        // By adding the point here, right away, using the tail coordinates that
+        // were already snapped by moveMouse() and reinforced by the press-time
+        // snap block above, a single click always produces exactly one new
+        // permanent vertex, and polyline creation chains segments continuously
+        // with no dependency on a mouse-move event occurring between clicks.
+        float [] [] points =
+        this.newPolyline.getPoints();
+        float xNewPoint = points [points.length - 1] [0]; float yNewPoint = points [points.length - 1] [1];
+
+        // Remember the point we just fixed as the new origin for angle
+        // magnetism, the same way the old deferred moveMouse() logic used to do
+        // once it finally processed the pending commit. Without this,
+        // subsequent segments would keep measuring their angle from the very
+        // first point of the polyline instead of from the last point actually
+        // placed.
+        this.xPreviousPoint = xNewPoint;
+        this.yPreviousPoint = yNewPoint;
+
+        // Add the new permanent vertex, duplicating the just-fixed position so
+        // the polyline immediately has a live rubber-band tail ready to be
+        // dragged by moveMouse() toward the next point - exactly as if the
+        // deferred add had already happened, but without waiting for it.
+        this.newPolyline.addPoint(xNewPoint, yNewPoint);
+
+        // The just-created vertex is now permanent; the duplicated tail is
+        // the sole live point for the next segment. Alignment feedback is
+        // purely visual and cannot interrupt this chain.
+        // Fully resolved: no commit is left pending, so moveMouse() simply
+        // continues to drag the newly added tail point like any other
+        // in-progress point (see the "else" branch of moveMouse() below).
+        this.newPoint = null;
+        if (this.newPolyline.getPointCount() <= 3
             && this.curvedPolyline
             && newPolyline.getJoinStyle() != Polyline.JoinStyle.CURVED) {
           // Give a second chance to create a curved polyline
@@ -15236,54 +15284,53 @@ public class PlanController extends FurnitureController implements Controller {
       if (editionActivated) {
         planView.deleteFeedback();
         if (this.newPolyline == null) {
-          // Edit xStart and yStart
+          // Edit starting X and Y coordinates
           planView.setToolTipEditedProperties(new EditableProperty [] {EditableProperty.X,
                                                                        EditableProperty.Y},
               new Object [] {this.xPreviousPoint, this.yPreviousPoint},
               this.xPreviousPoint, this.yPreviousPoint);
         } else {
-          if (this.newPoint != null) {
-            // May happen if edition is activated after the user clicked to add a new point
-            createNextSegment();
-          }
-          // Edit length and angle
+          // Edit length and angle of the active segment
+          int pointIndex =this.newPolyline.getPointCount() - 1;
           float [][] points = this.newPolyline.getPoints();
+          float xEnd = points [pointIndex] [0];
+          float yEnd = points [pointIndex] [1];
+
           planView.setToolTipEditedProperties(new EditableProperty [] {EditableProperty.LENGTH,
                                                                        EditableProperty.ANGLE},
-              new Object [] {getPolylineSegmentLength(this.newPolyline, points.length - 1),
-                             getPolylineSegmentAngle(this.newPolyline, points.length - 1)},
-              points [points.length - 1][0], points [points.length - 1][1]);
+              new Object [] {getPolylineSegmentLength(this.newPolyline, pointIndex),
+                             getPolylineSegmentAngle(this.newPolyline, pointIndex)},
+              xEnd, yEnd);
         }
+
+        if (feedbackDisplayed) {
         showPolylineFeedback();
+      }
+
       } else {
+        // This 'else' block runs when the user hits 'Enter' to CONFIRM their
+        // edits
         if (this.newPolyline == null) {
-          // Create a new segment once user entered the start point of the polyline
-          LengthUnit lengthUnit = preferences.getLengthUnit();
-          float defaultLength = lengthUnit.isMetric()  ? 300  : LengthUnit.footToCentimeter(10);
+          // 1. User confirmed the start point. We create a default initial
+          // segment.
+          float defaultLength = ! preferences.getLengthUnit().isMetric()  ? 300  : 304.8f; // roughly 10 feet in cm
           this.newPolyline = createAndSelectPolyline(this.xPreviousPoint, this.yPreviousPoint,
               this.xPreviousPoint + defaultLength, this.yPreviousPoint);
-          // Activate automatically second step to let user enter the
-          // length and angle of the new segment
+
+          // Activate the second step immediately to let the user edit the
+          // length/angle
           planView.deleteFeedback();
           setEditionActivated(true);
         } else if (System.currentTimeMillis() - this.lastPointCreationTime < 300) {
-          // If the user deactivated edition less than 300 ms after activation,
-          // escape current segment creation
-          escape();
+          // 2. Prevent accidental double-enters from creating micro-segments
+          validateDrawnPolyline();
         } else {
+          // 3. User confirmed the length/angle. Commit the segment and start
+          // the next one.
           endPolylineSegment();
-          float [][] points = this.newPolyline.getPoints();
-          // If last edited point matches first point validate drawn polyline
-          if (points.length > 2
-              && this.newPolyline.getPointIndexAt(points [points.length - 1][0], points [points.length - 1][1], 0.001f) == 0) {
-            // Remove last currently edited point and close path
-            this.newPolyline.removePoint(this.newPolyline.getPointCount() - 1);
-            this.newPolyline.setClosedPath(true);
-            validateDrawnPolyline();
-            return;
-          }
           createNextSegment();
-          // Reactivate automatically second step
+
+          // Reactivate the editable tooltip for the newly created segment
           planView.deleteToolTipFeedback();
           setEditionActivated(true);
         }
@@ -15293,16 +15340,45 @@ public class PlanController extends FurnitureController implements Controller {
     private void createNextSegment() {
       // Add a point to current polyline
       float [][] points = this.newPolyline.getPoints();
-      this.xPreviousPoint = points [points.length - 1][0];
-      this.yPreviousPoint = points [points.length - 1][1];
+
+      /*
+       * The last point is the live, temporary tail created by endPolylineSegment().
+       * The point immediately before it is the actual vertex that was just
+       * confirmed. Do not use the last two points as the previous segment because
+       * they are intentionally identical at this moment.
+       *
+       * Using the duplicate tail here makes the previous segment a zero-length
+       * segment. Apart from producing the wrong direction for the following
+       * segment, that zero-length vertex remains in the polyline when the next
+       * segment is created by keyboard editing. The resulting geometry is
+       * especially visible on thick polylines, where the join at that redundant
+       * vertex can be rendered as a separated or overlapping corner.
+       *
+       * Reuse the existing live tail instead of adding another point. This keeps
+       * exactly one editable point at the end of the polyline and preserves the
+       * same continuous point sequence used by normal mouse drawing.
+       */
+      int lastPointIndex = points.length - 1;
+      int previousPointIndex = points.length - 2;
+      int previousPreviousPointIndex =points.length - 3;
+
+      this.xPreviousPoint = points [previousPointIndex][0];
+      this.yPreviousPoint = points [previousPointIndex][1];
       // Create a new segment with an angle equal to previous segment angle - 90�
-      double previousSegmentAngle = Math.PI - Math.atan2(points [points.length - 2][1] - points [points.length - 1][1],
-          points [points.length - 2][0] - points [points.length - 1][0]);
+      double previousSegmentAngle = Math.PI - Math.atan2(points [previousPreviousPointIndex][1] - points [previousPointIndex][1],
+          points [previousPreviousPointIndex][0] - points [previousPointIndex][0]);
       previousSegmentAngle -=  Math.PI / 2;
-      float previousSegmentLength = getPolylineSegmentLength(this.newPolyline, points.length - 1);
-      this.newPolyline.addPoint(
-          (float)(this.xPreviousPoint + previousSegmentLength * Math.cos(previousSegmentAngle)),
-          (float)(this.yPreviousPoint - previousSegmentLength * Math.sin(previousSegmentAngle)));
+      float previousSegmentLength = getPolylineSegmentLength(this.newPolyline, previousPointIndex);
+
+      float xNewPoint =
+          (float)(this.xPreviousPoint + previousSegmentLength * Math.cos(previousSegmentAngle));
+      float yNewPoint =
+          (float)(this.yPreviousPoint - previousSegmentLength * Math.sin(previousSegmentAngle));
+
+      // Reuse the existing live tail created by endPolylineSegment().
+      // This avoids leaving a duplicate zero-length point in the polyline when
+      // the next segment is created from keyboard-entered length / angle values.
+      this.newPolyline.setPoint(xNewPoint, yNewPoint, lastPointIndex);
       this.newPoint = null;
       this.lastPointCreationTime = System.currentTimeMillis();
     }
