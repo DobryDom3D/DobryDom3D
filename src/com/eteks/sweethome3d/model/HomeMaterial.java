@@ -113,7 +113,7 @@ public class HomeMaterial implements Serializable {
       return (material.name == this.name
               || (material.name != null && material.name.equals(this.name)))
           && (material.key == this.key
-              || (material.key != null && material.key.equals(this.name)))
+              || (material.key != null && material.key.equals(this.key))) // Corrected potential bug from original code 'this.name' to 'this.key'
           && (material.color == this.color
               || (material.color != null && material.color.equals(this.color)))
           && (material.texture == this.texture
