@@ -1,12 +1,14 @@
 name: Release
 
-# Release-readiness pipeline: builds, tests and packages the Linux x64
-# release archive for a version tag, validates the artifact structure, and
-# attaches it to a DRAFT GitHub release (never published automatically).
+# Single entry point: for a version tag, builds Linux, Windows and macOS
+# packages via reusable workflows, then attaches them to ONE DRAFT GitHub
+# release (never published automatically). workflow_dispatch builds all
+# packages as artifacts only (no release) for dry runs.
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,38 +18,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  linux-x64-archive:
+  version:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    # Write is required only to attach artifacts to a DRAFT GitHub release
-    # via the built-in GITHUB_TOKEN; nothing is published automatically.
-    permissions:
-      contents: write
-
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Cache fetched test dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/sweethome3d
-          key: junit-4.13.2-hamcrest-1.3
-
-      - name: Set up Java 26
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          # Exact Adoptium release jdk-26.0.2+10; keep in sync with Taskfile.yml
-          # JAVA_VERSION / .tool-versions to avoid drift
-          java-version: "26.0.2+10"
-
-      - name: Install build and test tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ant ant-optional xvfb
-
-      - name: Verify tag matches build.xml version
+      - name: Read version and verify tag
+        id: version
         run: |
           set -euo pipefail
           version="$(sed -n 's/.*<property name="version" value="\([^"]*\)"\/>.*/\1/p' build.xml | head -n 1)"
@@ -56,51 +37,58 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match build.xml version v${version}"
             exit 1
           fi
-        id: version
 
-      - name: Test and build
-        timeout-minutes: 35
-        run: xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" ant -noinput ci-full
+  linux:
+    needs: version
+    uses: ./.github/workflows/_build-linux.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
-      - name: Build Java 26 Linux x64 archive
-        run: ant -noinput linux64Installer
+  windows:
+    needs: version
+    uses: ./.github/workflows/_build-windows.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
-      - name: Validate release archive
+  macos:
+    needs: version
+    uses: ./.github/workflows/_build-macos.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    # Only for tag pushes, and only when every platform build succeeded.
+    if: github.ref_type == 'tag'
+    needs: [version, linux, windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Write is required only to attach assets to a DRAFT release.
+    permissions:
+      contents: write
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
         run: |
           set -euo pipefail
-          version="${{ steps.version.outputs.version }}"
-          archive_root="DobryDom3D-${version}"
-          archives=(install/DobryDom3D-*-linux-x64.tgz)
-          if [ "${#archives[@]}" -ne 1 ] || [ ! -f "${archives[0]}" ]; then
-            echo "::error::Expected exactly one linux-x64 tgz in install/, found: ${archives[*]:-none}"
-            exit 1
-          fi
-          archive="${archives[0]}"
-          gzip --test "$archive"
-          listing="$(tar -tzf "$archive")"
-          printf '%s\n' "$listing"
-          for required in \
-            "${archive_root}/bin/DobryDom3D" \
-            "${archive_root}/lib/app/DobryDom3D.jar"; do
-            if ! grep -Fxq "$required" <<<"$listing"; then
-              echo "::error::Archive is missing required entry: $required"
-              exit 1
-            fi
-          done
-          echo "archive=${archive}" >> "$GITHUB_ENV"
+          ls -l
+          sha256sum DobryDom3D-* > SHA256SUMS
+          cat SHA256SUMS
 
-      - name: Upload release archive
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: DobryDom3D-${{ steps.version.outputs.version }}-linux-x64-java-26
-          path: install/DobryDom3D-*-linux-x64.tgz
-          if-no-files-found: error
-
-      - name: Attach archive to draft GitHub release
+      - name: Attach assets to draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
@@ -109,14 +97,12 @@ jobs:
               echo "::error::Release ${GITHUB_REF_NAME} already exists and is published; refusing to modify it"
               exit 1
             fi
-            echo "Draft release ${GITHUB_REF_NAME} exists; replacing the archive asset"
-            gh release upload "${GITHUB_REF_NAME}" "${archive}" --clobber
+            echo "Draft release exists; replacing assets"
+            gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
           else
             gh release create "${GITHUB_REF_NAME}" \
               --draft --verify-tag \
-              --title "DobryDom3D ${{ steps.version.outputs.version }}" \
+              --title "DobryDom3D ${{ needs.version.outputs.version }}" \
               --generate-notes \
-              "${archive}"
+              dist/*
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
