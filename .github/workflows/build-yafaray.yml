@@ -67,6 +67,14 @@ jobs:
           objdump -T out/linux-x64/libyafaray_v3_core.so | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1 | sed 's/^/max glibc needed: /'
         continue-on-error: true
 
+      - name: Test the built libraries with the application's YafaRay test
+        run: |
+          apt-get install --yes ant ant-optional
+          rm -rf lib/yafaray/linux/x64
+          mkdir -p lib/yafaray/linux/x64
+          cp -r out/linux-x64/. lib/yafaray/linux/x64/
+          ant -noinput test-yafaray
+
       - name: Upload natives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
