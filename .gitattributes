@@ -1,0 +1,8 @@
+# Catalog models/textures are compared by SHA-1 digest against content stored
+# in user homes (see HomeContentContext). Never let git rewrite line endings
+# in them, otherwise a Windows checkout with core.autocrlf=true changes the
+# digests and damaged homes can no longer be repaired.
+*.obj -text
+*.mtl -text
+src/**/resources/** -text
+test/**/resources/** -text
