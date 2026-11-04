@@ -1,10 +1,17 @@
 The following additional provisions apply to YafaRay third party software
 included in this product.
 
-YafaRay library is available at:
+YafaRay library (LGPL 2.1) is available at:
 https://github.com/YafaRay/libYafaRay
-To build the YafaRay and JNI libraries used by Sweet Home 3D, read instructions 
-in src/com/eteks/sweethome3d/j3d/YafarayRenderer.java file included in Sweet Home 3D project  
+
+The YafaRay library used by this product is based on libYafaRay v3.5.1 with a few
+changes (texture data set without reading files, removal of lights, background,
+camera and integrator, memory management fixes). The complete source, including
+its history, is available at:
+https://github.com/DobryDom3D/libYafaRay  (branch "dobrydom3d")
+
+To build the YafaRay and JNI libraries used by this product, read the instructions
+in the src/com/eteks/sweethome3d/j3d/YafarayRenderer.java file included in this project.
 
 
 YAFARAY AND DEPENDENCIES LICENSES
