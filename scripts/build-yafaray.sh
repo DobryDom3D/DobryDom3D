@@ -47,10 +47,20 @@ if [ -z "$(ls -A "$OUT/yafaray-plugins")" ]; then
     -exec cp {} "$OUT/yafaray-plugins/" \;
 fi
 
+# Generate the JNI header (YafarayRenderer.h is not checked in). javac -h
+# replaces the old javah; the source path pulls in the classes it depends on.
+JNI_GEN="$(mktemp -d)"
+(cd "$ROOT" && "$JAVA_HOME/bin/javac" -proc:none -encoding ISO-8859-1 \
+  -h "$JNI_GEN" -d "$JNI_GEN/classes" -sourcepath src \
+  -cp "lib/*:lib/java3d-1.6/*:libtest/*" \
+  src/com/eteks/sweethome3d/j3d/YafarayRenderer.java)
+test -f "$JNI_GEN/com_eteks_sweethome3d_j3d_YafarayRenderer.h"
+cp "$JNI_GEN/com_eteks_sweethome3d_j3d_YafarayRenderer.h" "$JNI_GEN/YafarayRenderer.h"
+
 # JNI glue, linked against the core library
 g++ -fPIC -std=c++11 -O2 \
   -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/$JNI_PLATFORM_INCLUDE" \
-  -I"$SRC/include" \
+  -I"$SRC/include" -I"$JNI_GEN" \
   "$ROOT/src/com/eteks/sweethome3d/j3d/YafarayRenderer.cpp" \
   -shared -o "$OUT/libyafarayjni.so" \
   -L"$OUT" -lyafaray_v3_core -Wl,-rpath,'$ORIGIN'
