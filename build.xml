@@ -197,6 +197,16 @@
   <property name="package.installer.dir" location="${package.dir}/installer"/>
   <property name="package.generated.image" location="${package.image.dir}/${package.name}${package.image.suffix}"/>
   <property name="package.published.image" location="install/DobryDom3D-${version}-${package.os}-${package.arch}"/>
+  <!-- macOS requires the first component of the bundle version to be >= 1, so a
+       0.x.y release is packaged as 1.x.y. File names keep the real ${version}. -->
+  <loadresource property="package.mac.version">
+    <propertyresource name="version"/>
+    <filterchain>
+      <tokenfilter>
+        <replaceregex pattern="^0\." replace="1."/>
+      </tokenfilter>
+    </filterchain>
+  </loadresource>
   <condition property="windows.signing.configured">
     <isset property="windows.signing.thumbprint"/>
   </condition>
@@ -1029,7 +1039,7 @@
       <arg value="--name"/>
       <arg value="${package.name}"/>
       <arg value="--app-version"/>
-      <arg value="${version}"/>
+      <arg value="${package.mac.version}"/>
       <arg value="--vendor"/>
       <arg value="DobryDom3D contributors"/>
       <arg value="--description"/>
@@ -1083,7 +1093,7 @@
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3p.properties"/>
     </exec>
-    <move file="${package.installer.dir}/${package.name}-${version}.dmg"
+    <move file="${package.installer.dir}/${package.name}-${package.mac.version}.dmg"
           tofile="install/DobryDom3D-${version}-macosx-${package.arch}.dmg"/>
     <delete dir="${package.dir}"/>
     <echo message="install/DobryDom3D-${version}-macosx-${package.arch}.dmg ready"/>
@@ -1100,7 +1110,7 @@
       <arg value="--name"/>
       <arg value="${package.name}"/>
       <arg value="--app-version"/>
-      <arg value="${version}"/>
+      <arg value="${package.mac.version}"/>
       <arg value="--vendor"/>
       <arg value="DobryDom3D contributors"/>
       <arg value="--description"/>
@@ -1159,7 +1169,7 @@
       <arg value="--mac-entitlements"/>
       <arg file="install/macosx/SweetHome3D.entitlements"/>
     </exec>
-    <move file="${package.installer.dir}/${package.name}-${version}.dmg"
+    <move file="${package.installer.dir}/${package.name}-${package.mac.version}.dmg"
           tofile="install/DobryDom3D-${version}-macosx-${package.arch}.dmg"/>
     <delete dir="${package.dir}"/>
     <echo message="signed install/DobryDom3D-${version}-macosx-${package.arch}.dmg ready"/>
