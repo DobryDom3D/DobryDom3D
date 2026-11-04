@@ -200,3 +200,67 @@ jobs:
           mkdir -p lib/yafaray/macosx
           cp -R universal/. lib/yafaray/macosx/
           ant -noinput test-yafaray
+
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out DobryDom3D
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out libYafaRay fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DobryDom3D/libYafaRay
+          ref: ${{ inputs.ref }}
+          path: libYafaRay
+
+      - name: Set up Java 26 (for jni.h)
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "26.0.2+10"
+
+      - name: Set up MSYS2 (MinGW 64-bit toolchain)
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+
+      - name: Build natives
+        shell: msys2 {0}
+        run: scripts/build-yafaray.sh libYafaRay out/windows-x64
+
+      - name: Compare with the committed libraries
+        shell: bash
+        run: |
+          echo "--- built plugins:   $(ls out/windows-x64/yafaray-plugins | wc -l)"
+          echo "--- committed plugins: $(ls lib/yafaray/windows/x64/yafaray-plugins | wc -l)"
+          diff <(ls out/windows-x64/yafaray-plugins) <(ls lib/yafaray/windows/x64/yafaray-plugins) && echo "plugin sets identical"
+          echo "--- built top level";     ls out/windows-x64
+          echo "--- committed top level"; ls lib/yafaray/windows/x64
+        continue-on-error: true
+
+      - name: Install Ant
+        shell: bash
+        run: choco install ant --yes --no-progress
+
+      - name: Test the built libraries with the application's YafaRay test
+        shell: bash
+        run: |
+          rm -rf lib/yafaray/windows/x64
+          mkdir -p lib/yafaray/windows/x64
+          cp -r out/windows-x64/. lib/yafaray/windows/x64/
+          ant -noinput test-yafaray
+
+      - name: Upload natives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yafaray-windows-x64
+          path: out/windows-x64
+          if-no-files-found: error

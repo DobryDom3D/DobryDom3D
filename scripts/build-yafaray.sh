@@ -7,8 +7,8 @@
 # output dir receives libyafaray_v3_core, libyafarayjni and yafaray-plugins/,
 # i.e. the layout of lib/yafaray/<os>/<arch>/. Needs JAVA_HOME (for jni.h),
 # cmake and a C++11 compiler. Implements Linux and macOS; on macOS set
-# ARCH=arm64 or ARCH=x86_64 (default: the host architecture). Windows is built
-# by a separate MSYS2 job.
+# ARCH=arm64 or ARCH=x86_64 (default: the host architecture). On Windows run it
+# from an MSYS2 MINGW64 shell (x64 only).
 set -euo pipefail
 
 SRC="$(cd "${1:?libYafaRay checkout}" && pwd)"
@@ -18,9 +18,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="${BUILD_DIR:-$(mktemp -d)}"
 
 CMAKE_PLATFORM_ARGS=()
+CP_SEP=:
 case "$(uname -s)" in
   Linux)
     JNI_PLATFORM_INCLUDE=linux; EXT=so
+    ;;
+  MINGW*|MSYS*)
+    JNI_PLATFORM_INCLUDE=win32; EXT=dll; CP_SEP=';'
+    JAVA_HOME="$(cygpath -u "$JAVA_HOME")"
+    # MinGW's C++11 threads are fine with current MSYS2; the bundled
+    # mingw-std-threads replacement must stay off (see libYafaRay CMakeLists)
+    CMAKE_PLATFORM_ARGS=(-G "MinGW Makefiles" -DWITH_MINGW_STD_THREADS=OFF)
     ;;
   Darwin)
     JNI_PLATFORM_INCLUDE=darwin; EXT=dylib
@@ -67,7 +75,11 @@ find "$BUILD/src" -name "lib*.$EXT" ! -name "$CORE" ! -name "libyafaray_v3_plugi
 
 # CMake leaves absolute build-tree search paths (Linux: even empty entries,
 # which mean the current directory); replace them with relative ones.
-if [ "$EXT" = so ]; then
+if [ "$EXT" = dll ]; then
+  # Windows has no rpath; the JNI loader (YafarayRenderer.java) loads these
+  # runtime DLLs first, in this order, from the same folder as the libraries.
+  for d in libwinpthread-1 libgcc_s_seh-1 libstdc++-6; do cp "/mingw64/bin/$d.dll" "$OUT/"; done
+elif [ "$EXT" = so ]; then
   command -v patchelf >/dev/null || { echo "patchelf is required to fix the RUNPATH" >&2; exit 1; }
   patchelf --set-rpath '$ORIGIN' "$OUT/$CORE"
   for f in "$OUT"/yafaray-plugins/*.so; do patchelf --set-rpath '$ORIGIN:$ORIGIN/..' "$f"; done
@@ -88,7 +100,7 @@ fi
 JNI_GEN="$(mktemp -d)"
 (cd "$ROOT" && "$JAVA_HOME/bin/javac" -proc:none -encoding ISO-8859-1 \
   -h "$JNI_GEN" -d "$JNI_GEN/classes" -sourcepath src \
-  -cp "lib/*:lib/java3d-1.6/*:libtest/*" \
+  -cp "lib/*${CP_SEP}lib/java3d-1.6/*${CP_SEP}libtest/*" \
   src/com/eteks/sweethome3d/j3d/YafarayRenderer.java)
 test -f "$JNI_GEN/com_eteks_sweethome3d_j3d_YafarayRenderer.h"
 cp "$JNI_GEN/com_eteks_sweethome3d_j3d_YafarayRenderer.h" "$JNI_GEN/YafarayRenderer.h"
@@ -98,7 +110,10 @@ JNI_SRC="$ROOT/src/com/eteks/sweethome3d/j3d/YafarayRenderer.cpp"
 JNI_COMMON=(-std=c++11 -O2
   -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/$JNI_PLATFORM_INCLUDE"
   -I"$SRC/include" -I"$JNI_GEN")
-if [ "$EXT" = so ]; then
+if [ "$EXT" = dll ]; then
+  g++ "${JNI_COMMON[@]}" "$JNI_SRC" -shared -o "$OUT/libyafarayjni.dll" \
+    -L"$OUT" -llibyafaray_v3_core
+elif [ "$EXT" = so ]; then
   g++ -fPIC "${JNI_COMMON[@]}" "$JNI_SRC" -shared -o "$OUT/libyafarayjni.so" \
     -L"$OUT" -lyafaray_v3_core -Wl,-rpath,'$ORIGIN'
 else
