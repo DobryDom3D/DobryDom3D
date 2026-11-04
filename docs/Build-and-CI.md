@@ -62,7 +62,8 @@ asdf.
 
 ## GitHub Actions (.github/workflows/)
 
-Two workflows plus Dependabot:
+Workflows plus Dependabot (release is built by `release.yml`, which calls
+`_build-linux.yml`, `_build-windows.yml` and `_build-macos.yml`; see below):
 
 - **`java-ci.yml`** — push/PR to `main`. Single job `test-and-build` on
   `ubuntu-latest`: runs `ant ci-full` under `xvfb-run`, then
@@ -95,6 +96,27 @@ Consequences still true:
   are release targets requiring host-native runs.
 - Signing remains manual Ant targets only; the release workflow stops at a
   validated draft release by design (no deployment secrets configured).
+
+- **`build-sunflow.yml`** — manual. Rebuilds the Sunflow jar from the
+  [DobryDom3D/sunflow](https://github.com/DobryDom3D/sunflow) fork and uploads
+  it as an artifact; copy it to `lib/sunflow-0.07.3i.jar` to update the app.
+
+## Sunflow source
+
+Sunflow is dead upstream (SourceForge, last revision r396), so the source is
+mirrored at <https://github.com/DobryDom3D/sunflow>:
+
+- `master` — the full SourceForge SVN history, imported with `git svn`
+  (`svn.code.sf.net/p/sunflow/code`, r396). Tag `svn-r396`.
+- `dobrydom3d` (default) — master plus the changes needed here as logical
+  commits: Sweet Home 3D changes (marked `// EP` in the source) and
+  DobryDom3D changes (marked `// DD3D`: SunSkyLight `power`, BucketRenderer
+  `transparentSky`). This replaces the old `sunflow-0.07.3i-src-diff.zip`
+  overlay, which is kept only as an archive.
+- Build: `ant -f buildForSweetHome3D.xml` in the fork, or run the
+  *Build Sunflow jar* workflow. Output `release/sunflow-0.07.3i.jar`.
+
+Make further Sunflow changes in the fork, not in this repository.
 
 ## Vendored dependencies (`lib/`, ~85 MB with natives)
 

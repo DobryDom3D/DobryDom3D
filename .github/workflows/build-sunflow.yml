@@ -1,0 +1,67 @@
+name: Build Sunflow jar
+
+# Manual: rebuilds lib/sunflow-0.07.3i.jar from the DobryDom3D/sunflow fork
+# (SourceForge r396 + Sweet Home 3D and DobryDom3D changes) so the checked-in
+# jar is reproducible. The jar is uploaded as an artifact; to update the app,
+# copy it over lib/sunflow-0.07.3i.jar and commit. Release builds keep using
+# the committed jar.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of DobryDom3D/sunflow to build
+        required: false
+        default: dobrydom3d
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Sunflow fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DobryDom3D/sunflow
+          ref: ${{ inputs.ref }}
+          path: sunflow
+
+      - name: Set up Java 26
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          # Same JDK as the app; the build file targets Java 8 bytecode
+          java-version: "26.0.2+10"
+
+      - name: Install Ant
+        run: sudo apt-get install --yes ant
+
+      - name: Build jar
+        working-directory: sunflow
+        run: |
+          ant -noinput -f buildForSweetHome3D.xml
+          ls -l release/
+          echo "Source commit: $(git rev-parse HEAD)"
+
+      - name: Validate jar
+        working-directory: sunflow
+        run: |
+          set -euo pipefail
+          jar=release/sunflow-0.07.3i.jar
+          count="$(unzip -Z1 "$jar" | grep -c '\.class$')"
+          echo "classes: $count"
+          if [ "$count" -lt 200 ]; then
+            echo "::error::Unexpectedly few classes in jar ($count)"
+            exit 1
+          fi
+          unzip -Z1 "$jar" | grep -q 'org/sunflow/core/SkyTransparency.class'
+
+      - name: Upload jar
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sunflow-0.07.3i-jar
+          path: sunflow/release/sunflow-0.07.3i.jar
+          if-no-files-found: error
