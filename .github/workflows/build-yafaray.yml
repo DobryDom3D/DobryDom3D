@@ -81,3 +81,122 @@ jobs:
           name: yafaray-linux-x64
           path: out/linux-x64
           if-no-files-found: error
+
+  macos:
+    name: macos-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    steps:
+      - name: Check out DobryDom3D
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out libYafaRay fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DobryDom3D/libYafaRay
+          ref: ${{ inputs.ref }}
+          path: libYafaRay
+
+      - name: Set up Java 26 (for jni.h)
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "26.0.2+10"
+
+      - name: Build natives
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: scripts/build-yafaray.sh libYafaRay out/macos-${{ matrix.arch }}
+
+      - name: Show linkage
+        run: |
+          file out/macos-${{ matrix.arch }}/*.dylib
+          for f in libyafaray_v3_core.dylib libyafarayjni.dylib; do
+            echo "== $f (built)"; otool -L out/macos-${{ matrix.arch }}/$f; otool -l out/macos-${{ matrix.arch }}/$f | grep -A2 LC_RPATH | grep path
+          done
+          echo "== libsimple.dylib (built)"; otool -L out/macos-${{ matrix.arch }}/yafaray-plugins/libsimple.dylib; otool -l out/macos-${{ matrix.arch }}/yafaray-plugins/libsimple.dylib | grep -A2 LC_RPATH | grep path
+          echo "== libyafarayjni.dylib (committed)"; otool -L lib/yafaray/macosx/libyafarayjni.dylib; otool -l lib/yafaray/macosx/libyafarayjni.dylib | grep -A2 LC_RPATH | grep path
+          echo "== libsimple.dylib (committed)"; otool -L lib/yafaray/macosx/yafaray-plugins/libsimple.dylib; otool -l lib/yafaray/macosx/yafaray-plugins/libsimple.dylib | grep -A2 LC_RPATH | grep path
+        continue-on-error: true
+
+      - name: Upload natives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yafaray-macos-${{ matrix.arch }}
+          path: out/macos-${{ matrix.arch }}
+          if-no-files-found: error
+
+  macos-universal:
+    needs: macos
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Download both architectures
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: yafaray-macos-*
+          path: in
+
+      - name: Merge with lipo
+        run: |
+          set -euo pipefail
+          mkdir -p out/macos/yafaray-plugins
+          for f in $(cd in/yafaray-macos-arm64 && find . -name '*.dylib' | sort); do
+            lipo -create "in/yafaray-macos-arm64/$f" "in/yafaray-macos-x86_64/$f" -output "out/macos/$f"
+          done
+          file out/macos/*.dylib | head -3
+          echo "plugins: $(ls out/macos/yafaray-plugins | wc -l)"
+
+      - name: Upload universal natives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yafaray-macos-universal
+          path: out/macos
+          if-no-files-found: error
+
+  macos-test:
+    name: test-macos-${{ matrix.arch }}
+    needs: macos-universal
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    steps:
+      - name: Check out DobryDom3D
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 26
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "26.0.2+10"
+
+      - name: Install Ant
+        run: brew install ant
+
+      - name: Download universal natives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: yafaray-macos-universal
+          path: universal
+
+      - name: Test the universal libraries with the application's YafaRay test
+        run: |
+          rm -rf lib/yafaray/macosx
+          mkdir -p lib/yafaray/macosx
+          cp -R universal/. lib/yafaray/macosx/
+          ant -noinput test-yafaray
