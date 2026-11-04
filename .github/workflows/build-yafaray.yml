@@ -55,6 +55,7 @@ jobs:
         run: scripts/build-yafaray.sh libYafaRay out/linux-x64
 
       - name: Compare with the committed libraries
+        shell: bash
         run: |
           echo "--- built plugins:   $(ls out/linux-x64/yafaray-plugins | wc -l)"
           echo "--- committed plugins: $(ls lib/yafaray/linux/x64/yafaray-plugins | wc -l)"
