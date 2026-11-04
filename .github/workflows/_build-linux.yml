@@ -2,11 +2,12 @@ name: Build Linux
 
 # Reusable: tests and packages the Linux x64 archive. Called by release.yml.
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       version:
         description: Application version from build.xml
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -49,6 +50,9 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version="$(sed -n 's/.*<property name="version" value="\([^"]*\)"\/>.*/\1/p' build.xml | head -n 1)"
+          fi
           archive_root="DobryDom3D-${version}"
           archives=(install/DobryDom3D-*-linux-x64.tgz)
           if [ "${#archives[@]}" -ne 1 ] || [ ! -f "${archives[0]}" ]; then

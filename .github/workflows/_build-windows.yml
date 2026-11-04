@@ -3,11 +3,12 @@ name: Build Windows
 # Reusable: tests and packages the Windows x64 installer. Called by release.yml.
 # Unsigned. NOTE: this path has not previously run in CI; expect first-run fixes.
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       version:
         description: Application version from build.xml
-        required: true
+        required: false
         type: string
 
 permissions:

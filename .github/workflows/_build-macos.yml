@@ -3,11 +3,12 @@ name: Build macOS
 # Reusable: tests and packages one DMG per CPU architecture. Called by release.yml.
 # Unsigned (Gatekeeper will warn). NOTE: this path has not previously run in CI.
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       version:
         description: Application version from build.xml
-        required: true
+        required: false
         type: string
 
 permissions:
