@@ -40,11 +40,19 @@ core="$(find "$BUILD" -name "$CORE" | head -n 1)"
 rm -rf "$OUT"/*
 cp "$core" "$OUT/"
 mkdir -p "$OUT/yafaray-plugins"
-find "$BUILD" -path '*yafaray-plugins*' -name "*.so" -exec cp {} "$OUT/yafaray-plugins/" \;
-if [ -z "$(ls -A "$OUT/yafaray-plugins")" ]; then
-  # fall back to any plugin libraries next to the core library
-  find "$(dirname "$core")" -maxdepth 2 -name "lib*.so" ! -name "$CORE" \
-    -exec cp {} "$OUT/yafaray-plugins/" \;
+# Plugins are built next to their sources (src/<module>/lib*.so). The core and
+# libyafaray_v3_plugin (the interface library used by script bindings) are not
+# plugins of the JNI renderer.
+find "$BUILD/src" -name "lib*.so" ! -name "$CORE" ! -name "libyafaray_v3_plugin.so" \
+  -exec cp {} "$OUT/yafaray-plugins/" \;
+[ -n "$(ls -A "$OUT/yafaray-plugins")" ] || { echo "no plugins found" >&2; exit 1; }
+# CMake leaves a RUNPATH of empty entries (which means the current directory);
+# replace it with the same relative search path as the committed libraries.
+if command -v patchelf >/dev/null 2>&1; then
+  patchelf --set-rpath '$ORIGIN' "$OUT/$CORE"
+  for f in "$OUT"/yafaray-plugins/*.so; do patchelf --set-rpath '$ORIGIN:$ORIGIN/..' "$f"; done
+else
+  echo "patchelf is required to fix the RUNPATH" >&2; exit 1
 fi
 
 # Generate the JNI header (YafarayRenderer.h is not checked in). javac -h

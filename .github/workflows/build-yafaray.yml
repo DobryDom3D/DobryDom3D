@@ -19,11 +19,22 @@ permissions:
 
 jobs:
   linux-x64:
-    # Oldest hosted Ubuntu: the resulting libraries need at least the glibc of
-    # the build machine (the committed ones were built on Ubuntu 16.04).
-    runs-on: ubuntu-22.04
+    # The libraries need at least the glibc of the machine they are built on
+    # (the committed ones were built on Ubuntu 16.04), so build in an older
+    # Ubuntu container than the hosted runners provide.
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+      env:
+        DEBIAN_FRONTEND: noninteractive
     timeout-minutes: 30
     steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install --yes build-essential cmake git patchelf
+          g++ --version | head -n 1; cmake --version | head -n 1; ldd --version | head -n 1
+
       - name: Check out DobryDom3D
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
