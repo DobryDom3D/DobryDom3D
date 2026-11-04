@@ -69,11 +69,11 @@ jobs:
 
       - name: Test the built libraries with the application's YafaRay test
         run: |
-          apt-get install --yes ant ant-optional
+          apt-get install --yes ant ant-optional xvfb libgl1 libglu1-mesa libgl1-mesa-dri libxi6 libxrender1 libxtst6 libxxf86vm1
           rm -rf lib/yafaray/linux/x64
           mkdir -p lib/yafaray/linux/x64
           cp -r out/linux-x64/. lib/yafaray/linux/x64/
-          ant -noinput test-yafaray
+          xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" ant -noinput test-yafaray
 
       - name: Upload natives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
