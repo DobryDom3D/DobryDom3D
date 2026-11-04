@@ -4,13 +4,16 @@ included as part of this product.
 SunFlow library is used for global illumination rendering.
 
 SunFlow library is available at:
-http://sourceforge.net/projects/sunflow/ 
-To build sunflow-0.07.3i.jar file, download the source code of its unreleased 0.07.3 version with the following SVN command:
-svn co -r 396 https://sunflow.svn.sourceforge.net/svnroot/sunflow/trunk sunflow
-and use sunflow-0.07.3i-src-diff.zip included in this project for source differences and instructions.
+http://sourceforge.net/projects/sunflow/
 
-The complete source of the jar used by this product, including the SourceForge history, is also available at:
+The sunflow-0.07.3i.jar file is built from its unreleased 0.07.3 version (SourceForge
+SVN revision 396, https://svn.code.sf.net/p/sunflow/code/trunk) with the modifications
+needed by this product. The complete source, including the SourceForge revision
+history and these modifications as separate commits, is available at:
 https://github.com/DobryDom3D/sunflow
+
+To build the jar, run the following command in a checkout of that repository:
+  ant -f buildForSweetHome3D.xml
 
 
 

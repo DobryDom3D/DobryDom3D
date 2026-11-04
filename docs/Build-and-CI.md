@@ -111,8 +111,8 @@ mirrored at <https://github.com/DobryDom3D/sunflow>:
 - `dobrydom3d` (default) — master plus the changes needed here as logical
   commits: Sweet Home 3D changes (marked `// EP` in the source) and
   DobryDom3D changes (marked `// DD3D`: SunSkyLight `power`, BucketRenderer
-  `transparentSky`). This replaces the old `sunflow-0.07.3i-src-diff.zip`
-  overlay, which is kept only as an archive.
+  `transparentSky`). This replaced the old `sunflow-0.07.3i-src-diff.zip`
+  overlay, which has been removed from this repository.
 - Build: `ant -f buildForSweetHome3D.xml` in the fork, or run the
   *Build Sunflow jar* workflow. Output `release/sunflow-0.07.3i.jar`.
 
@@ -163,10 +163,11 @@ javaAwtDesktop, jdepend-2.10 (rebuilt `--release 11`), **jdom-1.1.1**
 
 - `.gitignore`: reasonable; covers build output, release artifacts, `.task/`,
   `issues.md`.
-- **Binary patch artifacts at repo root**:
-  `freehep-vectorgraphics-svg-2.1.1c-src-diff.zip` (15 KB) and
-  `sunflow-0.07.3i-src-diff.zip` (118 KB) — license-compliance source dumps.
-  Should live under docs/ or be referenced, not root clutter.
+- **Binary patch artifact at repo root**:
+  `freehep-vectorgraphics-svg-2.1.1c-src-diff.zip` (15 KB) — a
+  license-compliance source dump. Should live under docs/ or be referenced,
+  not root clutter. (The equivalent Sunflow zip was replaced by the
+  DobryDom3D/sunflow fork.)
 - **Eclipse metadata committed**: `.project`, `.classpath`, `.settings/`
   (25 KB jdt prefs). `.classpath` pins a `JavaSE-26` JRE container,
   consistent with `release=26` elsewhere; also shipped inside
@@ -215,5 +216,5 @@ checksums). Upgrades of runtime jars require manually replacing binaries in
   (`JavaSE-26`).
 - Plan iText replacement (OpenPDF 1.x is the GPL-compatible continuation);
   document a Batik/JMF/sunflow retirement plan.
-- Move the two `-src-diff.zip` files out of the repo root; delete dead
+- Move the FreeHEP `-src-diff.zip` out of the repo root; delete dead
   `deploy/` JNLP/applet assets and Web Start targets if unsupported.
