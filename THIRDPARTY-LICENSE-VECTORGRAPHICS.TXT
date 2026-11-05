@@ -7,6 +7,13 @@ FreeHEP VectorGraphics library is available at:
 http://java.freehep.org/ 
 and source code can be downloaded at:
 ftp://ftp.slac.stanford.edu/software/freehep/VectorGraphics
+(these locations are no longer maintained; the source is also available at
+https://github.com/freehep/freehep-vectorgraphics)
+
+freehep-vectorgraphics-svg-2.1.1c.jar is version 2.1.1 with two modified classes,
+org.freehep.graphics2d.PixelGraphics2D and org.freehep.graphicsio.svg.SVGGraphics2D.
+Their modified source and the build instructions are in
+freehep-vectorgraphics-svg-2.1.1c-src-diff.zip included in this project.
 
 
 
