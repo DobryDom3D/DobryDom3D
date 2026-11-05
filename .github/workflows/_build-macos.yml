@@ -72,7 +72,8 @@ jobs:
           set -euo pipefail
           dmg=(install/DobryDom3D-*-macosx-${{ matrix.arch }}.dmg)
           mount_point="$(mktemp -d)"
-          hdiutil attach "${dmg[0]}" -mountpoint "$mount_point" -nobrowse -readonly
+          # The DMG embeds the license agreement, which hdiutil asks to accept on stdin
+          printf 'Y\n' | hdiutil attach "${dmg[0]}" -mountpoint "$mount_point" -nobrowse -readonly
           trap 'hdiutil detach "$mount_point" -force' EXIT
           plist="$(find "$mount_point" -maxdepth 4 -path '*.app/Contents/Info.plist' | head -n 1)"
           if [ -z "$plist" ]; then
