@@ -2,9 +2,10 @@ name: Build YafaRay natives
 
 # Manual: rebuilds the YafaRay native libraries (core, plugins and the JNI
 # glue in src/.../YafarayRenderer.cpp) from the DobryDom3D/libYafaRay fork, so
-# lib/yafaray/<os>/ is reproducible. Artifacts are uploaded; to update the app,
-# copy them over lib/yafaray/<os>/<arch>/ and commit. Release builds keep using
-# the committed libraries.
+# the natives are reproducible. Artifacts are uploaded. With release_tag set the
+# libraries are also published as a GitHub release; the application then
+# fetches them from there (see natives/yafaray.properties and the
+# fetch-yafaray-natives target in build.xml).
 on:
   workflow_dispatch:
     inputs:
@@ -12,6 +13,11 @@ on:
         description: Branch, tag or commit of DobryDom3D/libYafaRay to build
         required: false
         default: dobrydom3d
+        type: string
+      release_tag:
+        description: If set (e.g. yafaray-natives-1), publish the built libraries as assets of a new GitHub release with this tag
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -264,3 +270,49 @@ jobs:
           name: yafaray-windows-x64
           path: out/windows-x64
           if-no-files-found: error
+
+  publish:
+    # Only when a release tag was given, and only if every platform built and
+    # passed the application's YafaRay test.
+    if: inputs.release_tag != ''
+    needs: [linux-x64, macos-universal, macos-test, windows-x64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out libYafaRay fork (to record its commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: DobryDom3D/libYafaRay
+          ref: ${{ inputs.ref }}
+          path: libYafaRay
+
+      - name: Download built libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: yafaray-*
+          path: in
+
+      - name: Package and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          for pair in linux-x64:yafaray-linux-x64 windows-x64:yafaray-windows-x64 macosx:yafaray-macos-universal; do
+            name="${pair%%:*}"; dir="in/${pair##*:}"
+            (cd "$dir" && zip -qr "../../dist/yafaray-natives-${name}.zip" .)
+          done
+          (cd dist && sha256sum *.zip | tee SHA256SUMS)
+          fork_sha="$(git -C libYafaRay rev-parse HEAD)"
+          notes="YafaRay native libraries for DobryDom3D, built by the Build YafaRay natives workflow.
+
+          - libYafaRay fork commit: DobryDom3D/libYafaRay@${fork_sha}
+          - DobryDom3D commit (JNI glue): ${GITHUB_SHA}
+          - Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Fetched by the fetch-yafaray-natives Ant target; pinned by natives/yafaray.properties."
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "YafaRay natives ${TAG}" --notes "$notes" dist/*
