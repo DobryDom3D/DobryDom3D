@@ -41,3 +41,6 @@ issues.md
 /tools/furniture/importable/
 __pycache__/
 *.pyc
+
+# YafaRay natives are fetched by "ant fetch-yafaray-natives"
+/lib/yafaray/

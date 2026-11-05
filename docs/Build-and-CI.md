@@ -118,6 +118,29 @@ mirrored at <https://github.com/DobryDom3D/sunflow>:
 
 Make further Sunflow changes in the fork, not in this repository.
 
+## YafaRay natives
+
+The YafaRay core, its plugins and the JNI glue (`YafarayRenderer.cpp`) are built
+from [DobryDom3D/libYafaRay](https://github.com/DobryDom3D/libYafaRay) (branch
+`dobrydom3d`, based on libYafaRay v3.5.1) and published as a GitHub pre-release
+(`yafaray-natives-N`) with one zip per platform (Linux x64, Windows x64, macOS
+universal).
+
+- **Using them:** `natives/yafaray.properties` pins the release and the SHA-256 of
+  each zip. The `fetch-yafaray-natives` Ant target (run automatically by
+  `test-all`, `test-yafaray`, the package targets and `jarExecutable`) downloads
+  the zip for the current platform into the cache (`~/.cache/sweethome3d`),
+  verifies it and unpacks it to `lib/yafaray/` (git-ignored). Use
+  `ant fetch-yafaray-natives-all` for all platforms, or `-Dyafaray.skipfetch=true`
+  to use whatever is already in `lib/yafaray`.
+- **Building them:** run the *Build YafaRay natives* workflow (manual). It builds
+  on Ubuntu 20.04 (glibc >= 2.29), macOS arm64 + x86_64 (merged with `lipo`) and
+  Windows (MSYS2 MinGW), and runs the application's YafaRay test with each result.
+  Locally: `scripts/build-yafaray.sh <libYafaRay checkout> <out dir>`.
+- **Updating them:** change the fork, run the workflow with a new `release_tag`
+  (`yafaray-natives-2`, ...), then update the version and the three checksums in
+  `natives/yafaray.properties` (they are in the release's `SHA256SUMS`).
+
 ## Vendored dependencies (`lib/`, ~85 MB with natives)
 
 | Jar | Version | Concern |
@@ -133,8 +156,9 @@ Make further Sunflow changes in the fork, not in this repository.
 | java3d-1.6/jogl-all.jar | JOGL 2.5.0 (2023 build) | Reasonably current JogAmp. |
 
 Platform natives: `lib/linux/{i386,x64}`, `lib/windows/{i386,x64}`,
-`lib/macosx` (legacy JOGL jnilibs), `lib/java3d-1.6/{i586,linux,windows,macosx}`,
-`lib/yafaray/{linux,macosx,windows}`. The 32-bit (`i386`/`i586`) trees are dead
+`lib/macosx` (legacy JOGL jnilibs), `lib/java3d-1.6/{i586,linux,windows,macosx}`.
+The YafaRay natives (`lib/yafaray/{linux/x64,windows/x64,macosx}`) are **not
+committed**; see "YafaRay natives" below. The 32-bit (`i386`/`i586`) trees are dead
 weight for a JDK 26 product that no longer ships 32-bit packages.
 
 `libtest/` (8 jars): abbot (~2008 era), AppleJavaExtensions, gnu-regexp-1.1.4,

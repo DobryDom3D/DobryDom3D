@@ -79,7 +79,7 @@ jobs:
           rm -rf lib/yafaray/linux/x64
           mkdir -p lib/yafaray/linux/x64
           cp -r out/linux-x64/. lib/yafaray/linux/x64/
-          xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" ant -noinput test-yafaray
+          xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" ant -noinput -Dyafaray.skipfetch=true test-yafaray
 
       - name: Upload natives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -205,7 +205,7 @@ jobs:
           rm -rf lib/yafaray/macosx
           mkdir -p lib/yafaray/macosx
           cp -R universal/. lib/yafaray/macosx/
-          ant -noinput test-yafaray
+          ant -noinput -Dyafaray.skipfetch=true test-yafaray
 
   windows-x64:
     runs-on: windows-latest
@@ -262,7 +262,7 @@ jobs:
           rm -rf lib/yafaray/windows/x64
           mkdir -p lib/yafaray/windows/x64
           cp -r out/windows-x64/. lib/yafaray/windows/x64/
-          ant -noinput test-yafaray
+          ant -noinput -Dyafaray.skipfetch=true test-yafaray
 
       - name: Upload natives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
