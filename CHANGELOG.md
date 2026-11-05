@@ -6,6 +6,15 @@ This changelog records changes made in DobryDom3D after the upstream Sweet Home
 
 ## [Unreleased]
 
+### Added
+
+- Homes are now saved as `.dd3d` (`.dd3x` when compressed). `.dd3d`, `.dd3x`,
+  `.sh3d` and `.sh3x` files can all be opened, but a home opened from a Sweet
+  Home 3D file is never saved back over it: Save asks for a new name, suggesting
+  the `.dd3d` one. The home version was raised to 7401 so Sweet Home 3D warns on
+  DobryDom3D files. The Windows and macOS installers register `.dd3d` and
+  `.dd3x` and no longer register `.sh3d` and `.sh3x`.
+
 ### Changed
 
 - Upgraded the build from Java 21 to **Java 26** (Adoptium Temurin
