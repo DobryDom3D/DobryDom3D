@@ -47,8 +47,10 @@ public class Home implements Serializable, Cloneable {
    * The current version of this home. Each time the field list is changed
    * in <code>Home</code> class or in one of the classes that it uses,
    * this number is increased.
+   * It is greater than 7400, the version of Sweet Home 3D 7.5, so that Sweet Home 3D warns
+   * that the files saved by DobryDom3D were created with a more recent version.
    */
-  public static final long CURRENT_VERSION = 7400;
+  public static final long CURRENT_VERSION = 7401;
 
   private static final String  HOME_TOP_CAMERA_ID         = "camera-homeTopCamera";
   private static final String  HOME_OBSERVER_CAMERA_ID    = "observerCamera-homeObserverCamera";
