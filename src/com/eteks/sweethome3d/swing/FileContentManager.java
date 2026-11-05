@@ -76,6 +76,7 @@ import com.eteks.sweethome3d.model.UserPreferences;
 import com.eteks.sweethome3d.tools.OperatingSystem;
 import com.eteks.sweethome3d.tools.URLContent;
 import com.eteks.sweethome3d.viewcontroller.ContentManager;
+import com.eteks.sweethome3d.viewcontroller.HomeFileExtensions;
 import com.eteks.sweethome3d.viewcontroller.View;
 
 /**
@@ -323,8 +324,6 @@ public class FileContentManager implements ContentManager {
       }};
 
   private final UserPreferences           preferences;
-  private final String                    sweetHome3DFileExtension;
-  private final String                    sweetHome3DFileExtension2;
   private final String                    languageLibraryFileExtension;
   private final String                    furnitureLibraryFileExtension;
   private final String                    texturesLibraryFileExtension;
@@ -335,15 +334,6 @@ public class FileContentManager implements ContentManager {
 
   public FileContentManager(final UserPreferences preferences) {
     this.preferences = preferences;
-    this.sweetHome3DFileExtension = preferences.getLocalizedString(FileContentManager.class, "homeExtension");
-    String homeExtension2;
-    try {
-      // Get optional second extension
-      homeExtension2 = preferences.getLocalizedString(FileContentManager.class, "homeExtension2");
-    } catch (IllegalArgumentException ex) {
-      homeExtension2 = null;
-    }
-    this.sweetHome3DFileExtension2 = homeExtension2;
     this.languageLibraryFileExtension = preferences.getLocalizedString(FileContentManager.class, "languageLibraryExtension");
     this.furnitureLibraryFileExtension = preferences.getLocalizedString(FileContentManager.class, "furnitureLibraryExtension");
     this.texturesLibraryFileExtension = preferences.getLocalizedString(FileContentManager.class, "texturesLibraryExtension");
@@ -365,11 +355,9 @@ public class FileContentManager implements ContentManager {
         new FileFilter() {
           @Override
           public boolean accept(File file) {
-            // Accept directories, .sh3d and .sh3x files
+            // Accept directories, .dd3d, .dd3x, .sh3d and .sh3x files
             return file.isDirectory()
-                || file.getName().toLowerCase().endsWith(sweetHome3DFileExtension)
-                || (sweetHome3DFileExtension2 != null
-                     && file.getName().toLowerCase().endsWith(sweetHome3DFileExtension2));
+                || HomeFileExtensions.isHomeFile(file.getName());
           }
 
           @Override
@@ -455,10 +443,7 @@ public class FileContentManager implements ContentManager {
 
     // Fill file default extension map
     this.fileExtensions = new HashMap<ContentType, String []>();
-    String [] sweetHome3DFileExtensions = this.sweetHome3DFileExtension2 != null
-        ? new String [] {this.sweetHome3DFileExtension, this.sweetHome3DFileExtension2}
-        : new String [] {this.sweetHome3DFileExtension};
-    this.fileExtensions.put(ContentType.SWEET_HOME_3D,     sweetHome3DFileExtensions);
+    this.fileExtensions.put(ContentType.SWEET_HOME_3D,     HomeFileExtensions.getReadableExtensions());
     this.fileExtensions.put(ContentType.LANGUAGE_LIBRARY,  new String [] {this.languageLibraryFileExtension});
     this.fileExtensions.put(ContentType.FURNITURE_LIBRARY, new String [] {this.furnitureLibraryFileExtension});
     this.fileExtensions.put(ContentType.TEXTURES_LIBRARY,  new String [] {this.texturesLibraryFileExtension});
@@ -606,12 +591,18 @@ public class FileContentManager implements ContentManager {
                                String      path) {
     String defaultExtension = getDefaultFileExtension(contentType);
     if (path != null) {
-      // If path has an extension, remove it and build a path that matches contentType
-      int extensionIndex = path.lastIndexOf('.');
-      if (extensionIndex != -1) {
-        path = path.substring(0, extensionIndex);
-        if (defaultExtension != null) {
-          path += defaultExtension;
+      if (contentType == ContentType.SWEET_HOME_3D
+          && HomeFileExtensions.isHomeFile(path)) {
+        // Keep .dd3d and .dd3x, and never suggest overwriting a legacy .sh3d or .sh3x file
+        path = HomeFileExtensions.toNative(path);
+      } else {
+        // If path has an extension, remove it and build a path that matches contentType
+        int extensionIndex = path.lastIndexOf('.');
+        if (extensionIndex != -1) {
+          path = path.substring(0, extensionIndex);
+          if (defaultExtension != null) {
+            path += defaultExtension;
+          }
         }
       }
     }
@@ -646,7 +637,13 @@ public class FileContentManager implements ContentManager {
 
     boolean addedExtension = false;
     if (savedPath != null) {
-      if (defaultExtension != null) {
+      if (contentType == ContentType.SWEET_HOME_3D
+          && HomeFileExtensions.isHomeFile(savedPath)) {
+        // A home is never saved with a legacy extension, even if the user typed it
+        String nativePath = HomeFileExtensions.toNative(savedPath);
+        addedExtension = !nativePath.equals(savedPath);
+        savedPath = nativePath;
+      } else if (defaultExtension != null) {
         if (!savedPath.toLowerCase().endsWith(defaultExtension)) {
           savedPath += defaultExtension;
           addedExtension = true;
