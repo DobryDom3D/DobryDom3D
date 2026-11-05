@@ -1309,7 +1309,6 @@
         <include name="THIRDPARTY-LICENSE-*.HTML"/>
         <include name="*-diff.zip"/>
         <include name="src/**"/>
-        <include name="include/**"/>
         <include name="test/**"/>
         <include name="lib/**"/>
         <include name="libtest/**"/>

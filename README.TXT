@@ -19,7 +19,7 @@ as an Eclipse project or with Ant.
 
 If you want to compile and test the Java files of this release 
 with Eclipse, please follow the next steps:
-1. install JDK or OpenJDK 25 available at https://jdk.java.net/25/ and elsewhere
+1. install JDK or OpenJDK 26 available at https://jdk.java.net/26/ and elsewhere
 2. install Eclipse available at http://www.eclipse.org
 3. in Eclipse, select File > Import... menu
 4. In "Select an import source" list of Import dialog box, 
@@ -47,14 +47,14 @@ to run the program:
 The last release of Sweet Home 3D can be tested directly as a Java Web Start 
 application or downloaded at http://www.sweethome3d.com/ 
 
-If you want to build Sweet Home 3D with Ant, please install JDK 25 and
+If you want to build Sweet Home 3D with Ant, please install JDK 26 and
 Ant available at http://ant.apache.org/, and run ant command in the directory where
 you uncompressed this archive.
 The default target provided by build.xml Ant file builds the Jar executable version
 in the install subdirectory. Read build.xml Ant file for more information about
 other available targets.
 The packageAppImage target creates a self-contained application image with a
-Java 25 runtime for the current platform. Platform packages must be built on
+Java 26 runtime for the current platform. Platform packages must be built on
 their target operating system. Windows and Linux packages support x64; macOS
 packages support x64 and arm64 as separate downloads. 32-bit packages are no
 longer supported.

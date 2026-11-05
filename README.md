@@ -30,12 +30,11 @@ The original source documentation remains available in [`README.TXT`](README.TXT
 - `lib/` and `libtest/` - runtime and test dependencies
 - `deploy/` - legacy deployment descriptors and optional server scripts
 - `install/` - platform launcher and installer templates
-- `include/` - native YafaRay integration headers
 
 ## Building
 
-The project requires JDK 21 (LTS) and Apache Ant 1.9.8 or newer. The JDK is
-pinned to 21; see [JDK version pin](#jdk-version-pin) for why. Build the
+The project requires JDK 26 and Apache Ant 1.9.8 or newer. The JDK is
+pinned to 26; see [JDK version pin](#jdk-version-pin) for why. Build the
 standalone application with:
 
 ```sh
@@ -48,6 +47,12 @@ downloaded automatically, verified by SHA-256 checksum, and cached:
 ```sh
 ant clean test
 ```
+
+The YafaRay renderer's native libraries are not stored in the repository. The
+targets that need them (`test-all`, `test-yafaray`, the packaging targets) fetch
+them automatically from a pinned GitHub release, verify their checksums and
+unpack them into `lib/yafaray/`; run `ant fetch-yafaray-natives` to do it
+explicitly. See `docs/Build-and-CI.md` for how they are built and updated.
 
 The `ci` target cleans the workspace, runs the tests, and leaves the standalone
 application at `build/DobryDom3D.jar`:
@@ -83,7 +88,7 @@ Build a self-contained application image for the current platform with:
 ant clean packageAppImage
 ```
 
-The image contains a runtime linked from the JDK 21 running Ant. Packaging is
+The image contains a runtime linked from the JDK 26 running Ant. Packaging is
 host-native and supports Windows x64, Linux x64, and macOS x64 or arm64. The
 32-bit Windows and Linux packages and the old cross-platform portable archive
 are no longer supported.
