@@ -205,8 +205,15 @@ javaAwtDesktop, jdepend-2.10 (rebuilt `--release 11`), **jdom-1.1.1**
 
 - Modern flow is JDK 26 `jpackage`: per-OS targets with host/arch guards
   (`_checkPackageHost` enforcing JDK 26 and x64 everywhere, arm64 mac-only).
-- `install/jpackage/*.properties`: 6 file associations
-  (.sh3d/.sh3f/.sh3l/.sh3p/.sh3t/.sh3x).
+- `install/jpackage/*.properties`: file associations (.dd3d/.dd3x/.sh3f/.sh3l/
+  .sh3p/.sh3t). `.sh3d` and `.sh3x` are readable but must stay with Sweet Home 3D,
+  so DobryDom3D is only a secondary handler: `sh3d.properties` and
+  `sh3x.properties` set `mac.LSHandlerRank=Alternate` and are passed to the macOS
+  jpackage runs only; on Windows `install/jpackage/windows/main.wxs` (a copy of the
+  JDK 26 template, compare it when upgrading the JDK) adds `OpenWithProgids`
+  registry entries. CI checks both: `.github/scripts/check-macos-associations.py`
+  (gating) and `check-windows-associations.ps1` (installs the exe, non-gating
+  until proven). Neither can check how Finder or Explorer present the menus.
 - Windows: exe (`--win-menu/dir-chooser/shortcut`, upgrade UUID), SHA-256 +
   timestamp signtool signing, post-image hook
   (`install/windows/DobryDom3D-post-image.wsf`) injecting signing env vars.

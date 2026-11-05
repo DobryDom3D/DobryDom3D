@@ -7,15 +7,18 @@ time you start them (see [Installing](#installing)). Thank you for helping.
 
 ## Before you start — please read
 
-### 1. Back up every `.sh3d` file you open
+### 1. Your `.sh3d` files are not overwritten, but keep a copy anyway
 
-**Make a copy of any home file before you open it in DobryDom3D**, and keep the
-copy somewhere DobryDom3D will not touch. Work on the copy, or at least do not
-overwrite your only original.
+DobryDom3D saves homes as `.dd3d` files (`.dd3x` for "Save and compress"). It
+can open `.dd3d`, `.dd3x`, `.sh3d` and `.sh3x` files, but it never writes to a
+`.sh3d` or `.sh3x` file: when you save a home you opened from one, DobryDom3D
+asks for a new name, suggesting the same name with `.dd3d`. Your original stays
+as Sweet Home 3D left it.
 
-Future test builds may change the `.sh3d` format slightly, and it is not yet
-clear whether a home saved by DobryDom3D can still be opened by Sweet Home 3D.
-Treat files saved by DobryDom3D as DobryDom3D-only.
+Future test builds may change the file format, and a `.dd3d` file saved by
+DobryDom3D may not open in Sweet Home 3D (which then warns that the file was
+created with a more recent version). Treat `.dd3d` files as DobryDom3D-only,
+and still keep a backup copy of anything you care about.
 
 ### 2. If Sweet Home 3D is installed on the same computer
 
@@ -37,10 +40,13 @@ Some settings are also kept in the Java preferences store (Windows registry key
 
 ### 3. File associations
 
-The Windows and macOS installers register DobryDom3D for `.sh3d` files (and the
-other Sweet Home 3D file types), so double-clicking a home may now open
-DobryDom3D instead of Sweet Home 3D. You can change this in your system's
-"Open with" settings.
+The Windows and macOS installers register DobryDom3D for `.dd3d` and `.dd3x`
+files, and for the Sweet Home 3D library and plugin file types (`.sh3f`,
+`.sh3l`, `.sh3p`, `.sh3t`). For `.sh3d` and `.sh3x` files DobryDom3D is only
+listed as an alternative: it appears in "Open with" but does not become the
+default application, so those files keep opening in Sweet Home 3D when you
+double-click them. You can also use File > Open in DobryDom3D, or drag them onto
+its window. You can change associations in your system's "Open with" settings.
 
 ## Downloading
 
@@ -112,7 +118,7 @@ Open an issue at <https://github.com/DobryDom3D/DobryDom3D/issues> and include:
   dialog),
 - what you did, what you expected, and what happened — an exact error message or
   a screenshot helps a lot,
-- if it concerns a particular home, the `.sh3d` file, if you are able to share it.
+- if it concerns a particular home, the `.dd3d` or `.sh3d` file, if you are able to share it.
 
 ## Uninstalling
 

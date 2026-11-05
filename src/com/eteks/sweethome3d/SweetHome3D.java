@@ -98,6 +98,7 @@ import com.eteks.sweethome3d.swing.SwingViewFactory;
 import com.eteks.sweethome3d.tools.OperatingSystem;
 import com.eteks.sweethome3d.viewcontroller.ContentManager;
 import com.eteks.sweethome3d.viewcontroller.HomeController;
+import com.eteks.sweethome3d.viewcontroller.HomeFileExtensions;
 import com.eteks.sweethome3d.viewcontroller.View;
 import com.eteks.sweethome3d.viewcontroller.ViewFactory;
 
@@ -728,11 +729,14 @@ public class SweetHome3D extends HomeApplication {
       for (Home home : getHomes()) {
         if (home.isModified()) {
           String homeName = home.getName();
-          if (homeName == null) {
+          // Ask a name for unsaved homes and for homes opened from a Sweet Home 3D file,
+          // that must not be overwritten
+          if (homeName == null
+              || HomeFileExtensions.isLegacy(homeName)) {
             JFrame homeFrame = getHomeFrame(home);
             homeFrame.toFront();
             homeName = contentManager.showSaveDialog((View) homeFrame.getRootPane(), null,
-                ContentManager.ContentType.SWEET_HOME_3D, null);
+                ContentManager.ContentType.SWEET_HOME_3D, homeName);
           }
           if (homeName != null) {
             try {

@@ -74,6 +74,8 @@
     <include name="**/HomeSelectionTest.java"/>
     <include name="**/HomeController3DTest.java"/>
     <include name="**/HomeFileRecorderTest.java"/>
+    <include name="**/HomeFileExtensionsTest.java"/>
+    <include name="**/HomeSaveAsTest.java"/>
     <include name="**/HomeXMLRoundTripTest.java"/>
     <include name="**/HomeEnvironmentTurbidityTest.java"/>
     <include name="**/AutoRecoveryManagerTest.java"/>
@@ -1070,9 +1072,9 @@
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3d.properties"/>
+      <arg file="install/jpackage/dd3d.properties"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3x.properties"/>
+      <arg file="install/jpackage/dd3x.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3l.properties"/>
       <arg value="--file-associations"/>
@@ -1167,6 +1169,10 @@
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
       <arg value="--file-associations"/>
+      <arg file="install/jpackage/dd3d.properties"/>
+      <arg value="--file-associations"/>
+      <arg file="install/jpackage/dd3x.properties"/>
+      <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3d.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3x.properties"/>
@@ -1237,6 +1243,10 @@
       <arg value="--enable-native-access=ALL-UNNAMED"/>
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
+      <arg value="--file-associations"/>
+      <arg file="install/jpackage/dd3d.properties"/>
+      <arg value="--file-associations"/>
+      <arg file="install/jpackage/dd3x.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3d.properties"/>
       <arg value="--file-associations"/>
