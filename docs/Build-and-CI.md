@@ -144,6 +144,36 @@ universal).
   (`yafaray-natives-2`, ...), then update the version and the three checksums in
   `natives/yafaray.properties` (they are in the release's `SHA256SUMS`).
 
+## Changing Sunflow or YafaRay
+
+Changes to the forks span several repositories. Keep them checked out as
+siblings of this one:
+
+```
+dobrydom3d/
+  DobryDom3D/   this repository (work from here)
+  sunflow/      DobryDom3D/sunflow, branch dobrydom3d
+  libYafaRay/   DobryDom3D/libYafaRay, branch dobrydom3d
+```
+
+1. Edit and commit in the fork (Conventional Commits, as here). Test locally:
+   `scripts/build-yafaray.sh ../libYafaRay <out dir>` then
+   `ant -Dyafaray.skipfetch=true test-yafaray`, or `ant -f buildForSweetHome3D.xml`
+   in the Sunflow fork.
+2. Push the fork and run its build workflow here (*Build YafaRay natives* with a
+   new `release_tag`, or *Build Sunflow jar*).
+3. Pin the result in this repository: new version and checksums in
+   `natives/yafaray.properties`, or the new `lib/sunflow-0.07.3i.jar`. Commit that.
+
+This repository only ever references a released, pinned asset, never a fork branch.
+
+Working with Claude Code: start it in this repository so `AGENTS.md` is loaded,
+and give it the forks as extra directories: `claude --add-dir ../sunflow
+--add-dir ../libYafaRay`, or `/add-dir ../sunflow` in a running session (also
+works in the VS Code extension). To make that permanent, add the paths to
+`permissions.additionalDirectories` in `.claude/settings.local.json`
+(personal, not committed).
+
 ## Vendored dependencies (`lib/`, ~85 MB with natives)
 
 | Jar | Version | Concern |
