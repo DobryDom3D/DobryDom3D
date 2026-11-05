@@ -35,7 +35,8 @@ public class Camera extends HomeObject {
    * @author Emmanuel Puybaret
    * @since 3.0
    */
-  public enum Lens {PINHOLE, NORMAL, FISHEYE, SPHERICAL}
+  public enum Lens {PINHOLE, NORMAL, FISHEYE, SPHERICAL, ORTHOGRAPHIC}
+  //public enum Lens {PINHOLE, NORMAL, FISHEYE, SPHERICAL}
 
   /**
    * The properties of a camera that may change. <code>PropertyChangeListener</code>s added
