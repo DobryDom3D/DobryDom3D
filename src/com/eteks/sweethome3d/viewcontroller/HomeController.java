@@ -2523,7 +2523,9 @@ public class HomeController implements Controller {
    */
   private void save(HomeRecorder.Type recorderType, Runnable postSaveTask) {
     if (this.home.getName() == null
-        || this.home.isRepaired()) {
+        || this.home.isRepaired()
+        // Never write back over a file created by Sweet Home 3D
+        || HomeFileExtensions.isLegacy(this.home.getName())) {
       saveAs(recorderType, postSaveTask);
     } else {
       save(this.home.getName(), recorderType, postSaveTask);
@@ -2546,7 +2548,12 @@ public class HomeController implements Controller {
    * @since 4.4
    */
   protected void saveAs(HomeRecorder.Type recorderType, Runnable postSaveTask) {
-    String newName = getView().showSaveDialog(this.home.getName());
+    String suggestedName = this.home.getName();
+    if (suggestedName != null
+        && recorderType == HomeRecorder.Type.COMPRESSED) {
+      suggestedName = HomeFileExtensions.withExtension(suggestedName, HomeFileExtensions.COMPRESSED);
+    }
+    String newName = getView().showSaveDialog(suggestedName);
     if (newName != null) {
       save(newName, recorderType, postSaveTask);
     }
