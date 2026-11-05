@@ -67,6 +67,20 @@ jobs:
           fi
           hdiutil verify "${dmgs[0]}"
 
+      - name: Check file associations in the app
+        run: |
+          set -euo pipefail
+          dmg=(install/DobryDom3D-*-macosx-${{ matrix.arch }}.dmg)
+          mount_point="$(mktemp -d)"
+          hdiutil attach "${dmg[0]}" -mountpoint "$mount_point" -nobrowse -readonly
+          trap 'hdiutil detach "$mount_point" -force' EXIT
+          plist="$(find "$mount_point" -maxdepth 4 -path '*.app/Contents/Info.plist' | head -n 1)"
+          if [ -z "$plist" ]; then
+            echo "::error::No app Info.plist found in ${dmg[0]}"
+            exit 1
+          fi
+          python3 .github/scripts/check-macos-associations.py "$plist"
+
       - name: Upload DMG
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
