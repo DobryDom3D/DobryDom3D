@@ -394,7 +394,7 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
     BranchGroup branchGroup = (BranchGroup)transformGroup.getChild(0);
     if (branchGroup.numChildren() > 1
         && branchGroup.getChild(1) instanceof Shape3D) {
-      return branchGroup.getChild(1);
+      return (Shape3D) branchGroup.getChild(1);
     } else {
       return null;
     }
@@ -816,7 +816,7 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
             appearance.setTextureAttributes(getTextureAttributes(texture, true));
             appearance.setMaterial(getMaterial(DEFAULT_COLOR, DEFAULT_AMBIENT_COLOR, materialShininess));
             TextureManager.getInstance().loadTexture(texture.getImage(),
-                waitTextureLoadingEnd, getTextureObserver(appearance, mirrored, modelFlags));
+                waitTextureLoadingEnd, getTextureObserver(appearance, mirrored, modelFlags, null));
           }
         } else if (materialModified) {
           String appearanceName = null;
@@ -837,12 +837,16 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
                 if (material.getShininess() != null) {
                   materialShininess = material.getShininess();
                 }
+                Float materialTransparency = material.getTransparency();
+                Float materialReflection = material.getReflection();
                 color = material.getColor();
                 if (color != null
                     && (color.intValue() & 0xFF000000) != 0) {
-                  appearance.setMaterial(getMaterial(color, color, materialShininess));
+                  Material materialAppearance =getMaterial(color, color, materialShininess);
+                  materialAppearance = applyReflection(materialAppearance, materialReflection);
+                  appearance.setMaterial(materialAppearance);
                   appearance.setTexture(null);
-                  appearance.setTransparencyAttributes(defaultMaterialAndTexture.getTransparencyAttributes());
+                  appearance.setTransparencyAttributes(getTransparencyAttributes(materialTransparency, defaultMaterialAndTexture));
                   appearance.setPolygonAttributes(defaultMaterialAndTexture.getPolygonAttributes());
                 } else if (color == null && material.getTexture() != null) {
                   HomeTexture materialTexture = material.getTexture();
@@ -853,11 +857,14 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
                     appearance.setTexCoordGeneration(getTextureCoordinates(material.getTexture(), pieceSize, modelBounds));
                     appearance.setTextureAttributes(getTextureAttributes(materialTexture, true));
                   }
-                  appearance.setMaterial(getMaterial(DEFAULT_COLOR, DEFAULT_AMBIENT_COLOR, materialShininess));
+                  Material materialAppearance =getMaterial(DEFAULT_COLOR, DEFAULT_AMBIENT_COLOR, materialShininess);
+                  materialAppearance = applyReflection(materialAppearance, materialReflection);
+                  appearance.setMaterial(materialAppearance);
                   TextureManager.getInstance().loadTexture(materialTexture.getImage(),
-                      waitTextureLoadingEnd, getTextureObserver(appearance, mirrored, modelFlags));
+                      waitTextureLoadingEnd, getTextureObserver(appearance, mirrored, modelFlags, materialTransparency));
                 } else {
-                  restoreDefaultMaterialAndTexture(appearance, material.getShininess());
+                  restoreDefaultMaterialAndTexture(appearance, material.getShininess(),
+                      materialTransparency, materialReflection);
                 }
                 materialFound = true;
                 break;
@@ -878,14 +885,30 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
       }
     }
   }
-
+  
   /**
    * Returns a texture observer that will update the given <code>appearance</code>.
+   * If <code>materialTransparency</code> is not <code>null</code>, it overrides the
+   * transparency normally deduced from the texture's own alpha channel, so a material-specific transparency setting always takes precedence.
    */
-  private TextureObserver getTextureObserver(final Appearance appearance, final boolean mirrored, final int modelFlags) {
+  private TextureObserver getTextureObserver(final Appearance appearance, final boolean mirrored, final int modelFlags,
+                                             final Float materialTransparency) {
     return new TextureManager.TextureObserver() {
         public void textureUpdated(Texture texture) {
-          if (TextureManager.getInstance().isTextureTransparent(texture)) {
+          if (materialTransparency != null) {
+          int mode = materialTransparency.floatValue() == 0.0f ? TransparencyAttributes.NONE : TransparencyAttributes.NICEST;
+          appearance.setTransparencyAttributes(
+              new TransparencyAttributes(mode, materialTransparency.floatValue()));
+          DefaultMaterialAndTexture defaultMaterialAndTexture = (DefaultMaterialAndTexture)appearance.getUserData();
+          
+            if (defaultMaterialAndTexture != null
+                && defaultMaterialAndTexture.getPolygonAttributes() != null
+                && defaultMaterialAndTexture.getPolygonAttributes().getBackFaceNormalFlip()) {
+              appearance.setPolygonAttributes(NORMAL_FLIPPED_TEXTURED_SHAPE_POLYGON_ATTRIBUTES);
+            } else {
+              appearance.setPolygonAttributes(DEFAULT_TEXTURED_SHAPE_POLYGON_ATTRIBUTES);
+            }
+          } else if (TextureManager.getInstance().isTextureTransparent(texture)) {
             appearance.setTransparencyAttributes(DEFAULT_TEXTURED_SHAPE_TRANSPARENCY_ATTRIBUTES);
             DefaultMaterialAndTexture defaultMaterialAndTexture = (DefaultMaterialAndTexture)appearance.getUserData();
             if (defaultMaterialAndTexture != null
@@ -985,20 +1008,86 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
    */
   private void restoreDefaultMaterialAndTexture(Appearance appearance,
                                                 Float shininess) {
+    restoreDefaultMaterialAndTexture(appearance, shininess, null, null);
+  }
+
+
+  /**
+   * Restores default material and texture of the given <code>appearance</code>,
+   * overriding its default transparency with <code>transparency</code> and
+   * reflection with <code>reflection</code> when they aren't <code>null</code>
+   * (material-specific settings).
+   */
+  private void restoreDefaultMaterialAndTexture(Appearance appearance,
+                                                Float shininess, Float transparency,
+                                                Float reflection) {
     DefaultMaterialAndTexture defaultMaterialAndTexture = (DefaultMaterialAndTexture)appearance.getUserData();
     if (defaultMaterialAndTexture != null) {
       Material defaultMaterial = defaultMaterialAndTexture.getMaterial();
-      if (defaultMaterial != null && shininess != null) {
+      if (defaultMaterial != null && ( shininess != null || reflection != null)) {
         defaultMaterial = (Material)defaultMaterial.cloneNodeComponent(true);
+
+        if (shininess != null) {
         defaultMaterial.setSpecularColor(new Color3f(shininess, shininess, shininess));
         defaultMaterial.setShininess(shininess * 128);
       }
+
+        defaultMaterial = applyReflection(defaultMaterial, reflection);
+      }
+
       appearance.setMaterial(defaultMaterial);
-      appearance.setTransparencyAttributes(defaultMaterialAndTexture.getTransparencyAttributes());
+      appearance.setTransparencyAttributes(getTransparencyAttributes(transparency, defaultMaterialAndTexture));
       appearance.setPolygonAttributes(defaultMaterialAndTexture.getPolygonAttributes());
       appearance.setTexCoordGeneration(defaultMaterialAndTexture.getTexCoordGeneration());
       appearance.setTexture(getContextTexture(defaultMaterialAndTexture.getTexture(), getContext()));
       appearance.setTextureAttributes(defaultMaterialAndTexture.getTextureAttributes());
+    }
+  }
+
+  /**
+   * Applies the material reflection value to a Java 3D material.
+   *
+   * Java 3D's Material class doesn't expose a dedicated reflection property.
+   * Reflection is therefore represented here by increasing the material's
+   * specular component. A value of 0 leaves the material unchanged while a
+   * value of 1 gives the strongest specular contribution supported by the
+   * Java 3D material model.
+   *
+   * This is an approximation of reflection rather than true environment or
+   * mirror reflection.
+   */
+  private Material applyReflection(Material material, Float reflection) {
+    if (material != null && reflection != null) {
+      Material modifiedMaterial = (Material) material.cloneNodeComponent(true);
+      modifiedMaterial.setCapability(Material.ALLOW_COMPONENT_READ);
+      
+      float reflectionValue = Math.max(0, Math.min(1, reflection.floatValue()));
+      Color3f specularColor = new Color3f();
+      modifiedMaterial.getSpecularColor(specularColor);
+
+      float red = Math.max(specularColor.x, reflectionValue);
+      float green = Math.max(specularColor.y, reflectionValue);
+      float blue = Math.max(specularColor.z, reflectionValue);
+
+      modifiedMaterial.setSpecularColor(new Color3f(red, green, blue));
+      return modifiedMaterial;
+    }
+    return material;
+  }
+
+  /**
+   * Returns the transparency attributes to apply to a shape, giving priority to an
+   * explicit, material-specific <code>transparency</code> (0 = fully opaque, 1 = fully
+   * transparent) over the shape's own default transparency attributes when it isn't
+   * <code>null</code>.
+   */
+  private TransparencyAttributes getTransparencyAttributes(Float transparency,
+                                                           DefaultMaterialAndTexture defaultMaterialAndTexture) {
+    if (transparency != null) {
+      int mode = transparency.floatValue() == 0.0f ? TransparencyAttributes.NONE : TransparencyAttributes.NICEST;
+      return new TransparencyAttributes(mode, transparency.floatValue());
+    } else {
+      return defaultMaterialAndTexture.getTransparencyAttributes();
     }
   }
 
@@ -1109,7 +1198,7 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
   }
 
   /**
-   * Sets whether all <code>Shape3D</code> children nodes of <code>node</code> should have
+   * Sets whether all <code>Shape3D</code> children of <code>node</code> should have
    * their normal flipped or not.
    * Caution !!! Should be executed only once per instance
    * @param backFaceNormalFlip <code>true</code> if normals should be flipped.
@@ -1142,7 +1231,7 @@ public class HomePieceOfFurniture3D extends Object3DBranch {
   }
 
   /**
-   * Cancels the pickability of the <code>Shape3D</code> children nodes of <code>node</code>
+   * Cancels the pickability of the <code>Shape3D</code> children of <code>node</code>
    * when it uses a transparent appearance.
    */
   private void setTransparentShapeNotPickable(Node node) {
