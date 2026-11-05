@@ -111,7 +111,8 @@ JNI_COMMON=(-std=c++11 -O2
   -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/$JNI_PLATFORM_INCLUDE"
   -I"$SRC/include" -I"$JNI_GEN")
 if [ "$EXT" = dll ]; then
-  g++ "${JNI_COMMON[@]}" "$JNI_SRC" -shared -o "$OUT/libyafarayjni.dll" \
+  # same definitions libYafaRay's CMake adds on Windows
+  g++ -DWIN32 -D_USE_MATH_DEFINES -D_hypot=hypot "${JNI_COMMON[@]}" "$JNI_SRC" -shared -o "$OUT/libyafarayjni.dll" \
     -L"$OUT" -llibyafaray_v3_core
 elif [ "$EXT" = so ]; then
   g++ -fPIC "${JNI_COMMON[@]}" "$JNI_SRC" -shared -o "$OUT/libyafarayjni.so" \
