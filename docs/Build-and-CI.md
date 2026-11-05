@@ -70,7 +70,10 @@ Workflows plus Dependabot (release is built by `release.yml`, which calls
   `linux64Installer`, `coverage`, `spotbugs`, an env-leak scan gate before
   artifact upload.
 - **`release.yml`** — tag push `v*`. Refuses tags that don't match the
-  `version` property in build.xml, runs `ci-full` under xvfb, builds
+  `version` property in build.xml (`v<version>`), except that `v<version>-<suffix>`
+  (e.g. `v0.1.0-test1`) is accepted as a **test build** and its draft release is
+  marked as a pre-release. Test builds are described for testers in
+  [Tester-Guide.md](Tester-Guide.md). runs `ci-full` under xvfb, builds
   `linux64Installer`, validates the tgz (exactly one archive, gzip
   integrity, launcher + application jar entries present), uploads it as a
   workflow artifact, and attaches it to a **draft** GitHub release via the

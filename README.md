@@ -93,6 +93,10 @@ host-native and supports Windows x64, Linux x64, and macOS x64 or arm64. The
 32-bit Windows and Linux packages and the old cross-platform portable archive
 are no longer supported.
 
+Test builds are published as GitHub pre-releases (tags such as `v0.1.0-test1`).
+Testers should read [docs/Tester-Guide.md](docs/Tester-Guide.md) first: the
+installers are not code-signed and the saved `.sh3d` format may still change.
+
 Platform release targets are:
 
 ```sh

@@ -1,6 +1,7 @@
 name: Release
 
-# Single entry point: for a version tag, builds Linux, Windows and macOS
+# Single entry point: for a version tag (v<version>, or v<version>-<suffix> for a
+# test build, published as a pre-release), builds Linux, Windows and macOS
 # packages via reusable workflows, then attaches them to ONE DRAFT GitHub
 # release (never published automatically). workflow_dispatch builds all
 # packages as artifacts only (no release) for dry runs.
@@ -37,9 +38,15 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match build.xml version v${version}"
-            exit 1
+          # v<version> is a release; v<version>-<suffix> (e.g. v0.1.0-test1) is a
+          # test build of that version and is published as a pre-release.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              "v${version}"|"v${version}-"?*) ;;
+              *)
+                echo "::error::Tag ${GITHUB_REF_NAME} does not match build.xml version v${version} (or v${version}-<suffix> for a test build)"
+                exit 1 ;;
+            esac
           fi
 
   linux:
@@ -100,9 +107,15 @@ jobs:
             echo "Draft release exists; replacing assets"
             gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
           else
+            prerelease=()
+            title="DobryDom3D ${{ needs.version.outputs.version }}"
+            if [ "${GITHUB_REF_NAME}" != "v${{ needs.version.outputs.version }}" ]; then
+              prerelease=(--prerelease)
+              title="DobryDom3D ${GITHUB_REF_NAME#v} (test build)"
+            fi
             gh release create "${GITHUB_REF_NAME}" \
-              --draft --verify-tag \
-              --title "DobryDom3D ${{ needs.version.outputs.version }}" \
+              --draft --verify-tag "${prerelease[@]}" \
+              --title "${title}" \
               --generate-notes \
               dist/*
           fi

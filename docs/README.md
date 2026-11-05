@@ -12,6 +12,7 @@ live in the repository README.
 - [Testing](Testing.md) — test inventory, what runs where, coverage gaps, how to add tests
 - [Build & CI](Build-and-CI.md) — build system, CI pipeline, vendored dependencies & supply-chain risks
 - [iText Retirement](iText-Retirement.md) — investigation and plan for replacing the EOL iText 2.1.7 PDF dependency
+- [Tester Guide](Tester-Guide.md) — instructions for people trying test builds (install warnings, backups, reporting)
 - [Engineering Priorities](Engineering-Priorities.md) — ranked list of actionable improvements
 
 ## Quick facts
