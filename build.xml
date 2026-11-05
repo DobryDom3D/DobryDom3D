@@ -1072,9 +1072,9 @@
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3d.properties"/>
+      <arg file="install/jpackage/dd3d.properties"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3x.properties"/>
+      <arg file="install/jpackage/dd3x.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3l.properties"/>
       <arg value="--file-associations"/>
@@ -1169,9 +1169,9 @@
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3d.properties"/>
+      <arg file="install/jpackage/dd3d.properties"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3x.properties"/>
+      <arg file="install/jpackage/dd3x.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3l.properties"/>
       <arg value="--file-associations"/>
@@ -1240,9 +1240,9 @@
       <arg value="--license-file"/>
       <arg file="LICENSE.TXT"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3d.properties"/>
+      <arg file="install/jpackage/dd3d.properties"/>
       <arg value="--file-associations"/>
-      <arg file="install/jpackage/sh3x.properties"/>
+      <arg file="install/jpackage/dd3x.properties"/>
       <arg value="--file-associations"/>
       <arg file="install/jpackage/sh3l.properties"/>
       <arg value="--file-associations"/>
