@@ -75,6 +75,15 @@ jobs:
             exit 1
           fi
 
+      # Installs the unsigned installer on the runner to read back the registry. Non-gating until
+      # proven on a runner: the build above is what gates the release.
+      - name: Check file associations after install (non-gating until proven)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem install/DobryDom3D-*-windows-x64.exe | Select-Object -First 1).FullName
+          ./.github/scripts/check-windows-associations.ps1 -Installer $installer
+
       - name: Upload installer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
