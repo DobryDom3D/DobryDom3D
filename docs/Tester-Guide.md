@@ -42,10 +42,11 @@ Some settings are also kept in the Java preferences store (Windows registry key
 
 The Windows and macOS installers register DobryDom3D for `.dd3d` and `.dd3x`
 files, and for the Sweet Home 3D library and plugin file types (`.sh3f`,
-`.sh3l`, `.sh3p`, `.sh3t`). They do not register DobryDom3D for `.sh3d` or
-`.sh3x` files, which stay with Sweet Home 3D; open those with File > Open in
-DobryDom3D, or drag them onto its window. You can change associations in your
-system's "Open with" settings.
+`.sh3l`, `.sh3p`, `.sh3t`). For `.sh3d` and `.sh3x` files DobryDom3D is only
+listed as an alternative: it appears in "Open with" but does not become the
+default application, so those files keep opening in Sweet Home 3D when you
+double-click them. You can also use File > Open in DobryDom3D, or drag them onto
+its window. You can change associations in your system's "Open with" settings.
 
 ## Downloading
 
