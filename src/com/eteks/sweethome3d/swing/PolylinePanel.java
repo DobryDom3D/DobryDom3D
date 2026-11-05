@@ -98,6 +98,7 @@ public class PolylinePanel extends JPanel implements DialogView {
   /**
    * Creates and initializes components and spinners model.
    */
+  @SuppressWarnings("unchecked")
   private void createComponents(UserPreferences preferences,
                                 final PolylineController controller) {
     // Create thickness label and spinner bound to controller THICKNESS property
@@ -159,8 +160,27 @@ public class PolylinePanel extends JPanel implements DialogView {
                   g2D.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                   g2D.setColor(list.getForeground());
                   int iconWidth = 64;
+
+                  // Calculate line start position to prevent interior bleed
+                  int startX = 6;
+                  if (arrowsStyle.getStartArrowStyle() == Polyline.ArrowStyle.HOLLOW_CIRCLE) {
+                    startX = 13;
+                  } else if (arrowsStyle.getStartArrowStyle() == Polyline.ArrowStyle.HOLLOW_RHOMBUS) {
+                    startX = 15;
+                  }
+
+                  // Calculate line end position to prevent interior bleed
+                  int endX = iconWidth - 6;
+                  if (arrowsStyle.getEndArrowStyle() == Polyline.ArrowStyle.HOLLOW_CIRCLE) {
+                    endX = iconWidth - 12;
+                  } else if (arrowsStyle.getEndArrowStyle() == Polyline.ArrowStyle.HOLLOW_RHOMBUS) {
+                    endX = iconWidth - 14;
+                  }
+
                   g2D.setStroke(new BasicStroke(2));
-                  g2D.drawLine(6, 8, iconWidth - 6, 8);
+                  g2D.drawLine(startX, 8, endX, 8);
+                  
+                  // START ARROW STYLE
                   switch (arrowsStyle.getStartArrowStyle()) {
                     case NONE :
                       break;
@@ -173,7 +193,16 @@ public class PolylinePanel extends JPanel implements DialogView {
                     case DELTA :
                       g2D.fillPolygon(new int [] {3, 15, 15}, new int [] {8, 3, 13}, 3);
                       break;
+                    case HOLLOW_CIRCLE :
+                      g2D.drawOval(4, 4, 9, 9);
+                      break;
+                    case HOLLOW_RHOMBUS :
+                      g2D.drawPolygon(new int [] {3, 9, 15, 9}, new int [] {8, 3, 8, 13
+                  }, 4);
+                      break;
                   }
+                  
+                  // END ARROW STYLE
                   switch (arrowsStyle.getEndArrowStyle()) {
                     case NONE :
                       break;
@@ -185,6 +214,12 @@ public class PolylinePanel extends JPanel implements DialogView {
                       break;
                     case DELTA :
                       g2D.fillPolygon(new int [] {iconWidth - 2, iconWidth - 14, iconWidth - 14}, new int [] {8, 3, 13}, 3);
+                      break;
+                    case HOLLOW_CIRCLE :
+                      g2D.drawOval(iconWidth - 12, 4, 9, 9);
+                      break;
+                    case HOLLOW_RHOMBUS :
+                      g2D.drawPolygon(new int [] {iconWidth - 2, iconWidth - 8, iconWidth - 14, iconWidth - 8}, new int [] {8, 3, 8, 13}, 4);
                       break;
                   }
                 }

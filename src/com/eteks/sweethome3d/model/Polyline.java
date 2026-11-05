@@ -48,7 +48,7 @@ public class Polyline extends HomeObject implements Selectable, Elevatable {
 
   public enum JoinStyle {BEVEL, MITER, ROUND, CURVED}
 
-  public enum ArrowStyle {NONE, DELTA, OPEN, DISC}
+  public enum ArrowStyle {NONE, DELTA, OPEN, DISC, HOLLOW_CIRCLE, HOLLOW_RHOMBUS}
 
   public enum DashStyle {SOLID, DOT, DASH, DASH_DOT, DASH_DOT_DOT, CUSTOMIZED;
     /**
