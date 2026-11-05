@@ -124,7 +124,11 @@ renderers :7263–7412.
 
 ## Persistence
 
-`.sh3d` files are ZIPs containing either a Java-serialized `Home` (entry
+Home files are ZIPs (`.dd3d`, `.dd3x`, and the legacy Sweet Home 3D `.sh3d`,
+`.sh3x`). DobryDom3D reads all four but writes only `.dd3d`/`.dd3x`
+(`viewcontroller/HomeFileExtensions`; saving a home opened from a legacy file
+goes through Save As). `Home.CURRENT_VERSION` is above Sweet Home 3D's so that
+it warns on DobryDom3D files. They contain either a Java-serialized `Home` (entry
 `Home`) or an XML entry `Home.xml`.
 
 - Reader gives **priority to `Home.xml` when present**

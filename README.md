@@ -95,7 +95,7 @@ are no longer supported.
 
 Test builds are published as GitHub pre-releases (tags such as `v0.1.0-test1`).
 Testers should read [docs/Tester-Guide.md](docs/Tester-Guide.md) first: the
-installers are not code-signed and the saved `.sh3d` format may still change.
+installers are not code-signed and the saved `.dd3d` format may still change.
 
 Platform release targets are:
 
