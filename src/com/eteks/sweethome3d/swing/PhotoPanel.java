@@ -142,6 +142,8 @@ public class PhotoPanel extends JPanel implements DialogView {
   private JComboBox                rendererComboBox;
   private JLabel                   turbidityLabel;
   private JSpinner                 turbiditySpinner;
+  private JLabel                   ozoneLabel;
+  private JSpinner                 ozoneSpinner;
   private JCheckBox                skyTransparentCheckBox;
   private JCheckBox                skyThroughGlassTransparentCheckBox;
   private JLabel                   exposureLabel;
@@ -501,7 +503,21 @@ public class PhotoPanel extends JPanel implements DialogView {
           controller.setTurbidity(((Number)turbiditySpinner.getValue()).floatValue());
         }
       });
-    // Turbidity has no effect when the sky is replaced by a texture lighting an observer camera view
+    this.ozoneLabel = new JLabel();
+    this.ozoneSpinner = new JSpinner(new SpinnerNumberModel(controller.getOzone(),
+        HomeEnvironment.MIN_OZONE, HomeEnvironment.MAX_OZONE, 0.05f));
+    controller.addPropertyChangeListener(AbstractPhotoController.Property.OZONE,
+        new PropertyChangeListener() {
+          public void propertyChange(PropertyChangeEvent ev) {
+            ozoneSpinner.setValue(controller.getOzone());
+          }
+        });
+    this.ozoneSpinner.addChangeListener(new ChangeListener() {
+        public void stateChanged(ChangeEvent ev) {
+          controller.setOzone(((Number)ozoneSpinner.getValue()).floatValue());
+        }
+      });
+    // Turbidity and ozone have no effect when the sky is replaced by a texture lighting an observer camera view
     PropertyChangeListener turbidityEnabledListener = new PropertyChangeListener() {
         public void propertyChange(PropertyChangeEvent ev) {
           updateTurbidityEnabled();
@@ -614,6 +630,8 @@ public class PhotoPanel extends JPanel implements DialogView {
         PhotoPanel.class, "rendererLabel.text"));
     this.turbidityLabel.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "turbidityLabel.text"));
+    this.ozoneLabel.setText(SwingTools.getLocalizedLabelText(preferences,
+        PhotoPanel.class, "ozoneLabel.text"));
     this.skyTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
         PhotoPanel.class, "skyTransparentCheckBox.text"));
     this.skyThroughGlassTransparentCheckBox.setText(SwingTools.getLocalizedLabelText(preferences,
@@ -654,6 +672,9 @@ public class PhotoPanel extends JPanel implements DialogView {
       this.turbidityLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "turbidityLabel.mnemonic")).getKeyCode());
       this.turbidityLabel.setLabelFor(this.turbiditySpinner);
+      this.ozoneLabel.setDisplayedMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
+          PhotoPanel.class, "ozoneLabel.mnemonic")).getKeyCode());
+      this.ozoneLabel.setLabelFor(this.ozoneSpinner);
       this.skyTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
           PhotoPanel.class, "skyTransparentCheckBox.mnemonic")).getKeyCode());
       this.skyThroughGlassTransparentCheckBox.setMnemonic(KeyStroke.getKeyStroke(preferences.getLocalizedString(
@@ -773,32 +794,40 @@ public class PhotoPanel extends JPanel implements DialogView {
         1, 4, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
     // Eighth row
-    advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
-        1, 5, 4, 1, 0, 0, GridBagConstraints.LINE_START,
-        GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
+    advancedPanel.add(this.ozoneLabel, new GridBagConstraints(
+        0, 5, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
+    this.ozoneLabel.setHorizontalAlignment(labelAlignment);
+    advancedPanel.add(this.ozoneSpinner, new GridBagConstraints(
+        1, 5, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
     // Ninth row
-    advancedPanel.add(this.skyThroughGlassTransparentCheckBox, new GridBagConstraints(
+    advancedPanel.add(this.skyTransparentCheckBox, new GridBagConstraints(
         1, 6, 4, 1, 0, 0, GridBagConstraints.LINE_START,
-        GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
+        GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
     // Tenth row
+    advancedPanel.add(this.skyThroughGlassTransparentCheckBox, new GridBagConstraints(
+        1, 7, 4, 1, 0, 0, GridBagConstraints.LINE_START,
+        GridBagConstraints.NONE, new Insets(0, 0, standardGap, 0), 0, 0));
+    // Eleventh row
     advancedPanel.add(this.exposureLabel, new GridBagConstraints(
-        0, 7, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        0, 8, 1, 1, 0, 0, GridBagConstraints.CENTER,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
     this.exposureLabel.setHorizontalAlignment(labelAlignment);
     advancedPanel.add(this.exposureSpinner, new GridBagConstraints(
-        1, 7, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        1, 8, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
-    // Eleventh row
+    // Twelfth row
     advancedPanel.add(this.sunPowerLabel, new GridBagConstraints(
-        0, 8, 1, 1, 0, 0, GridBagConstraints.CENTER,
+        0, 9, 1, 1, 0, 0, GridBagConstraints.CENTER,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, standardGap), 0, 0));
     this.sunPowerLabel.setHorizontalAlignment(labelAlignment);
     advancedPanel.add(this.sunPowerSpinner, new GridBagConstraints(
-        1, 8, 1, 1, 0, 0, GridBagConstraints.LINE_START,
+        1, 9, 1, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.HORIZONTAL, new Insets(0, 0, standardGap, 10), 0, 0));
     // Last row
     advancedPanel.add(this.skyLightingInteriorCheckBox, new GridBagConstraints(
-        1, 9, 4, 1, 0, 0, GridBagConstraints.LINE_START,
+        1, 10, 4, 1, 0, 0, GridBagConstraints.LINE_START,
         GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
 
     add(advancedPanel, new GridBagConstraints(
@@ -819,6 +848,7 @@ public class PhotoPanel extends JPanel implements DialogView {
             + this.lensComboBox.getPreferredSize().height + 5
             + this.rendererComboBox.getPreferredSize().height + 5
             + this.turbiditySpinner.getPreferredSize().height + 5
+            + this.ozoneSpinner.getPreferredSize().height + 5
             + this.skyTransparentCheckBox.getPreferredSize().height
             + this.skyThroughGlassTransparentCheckBox.getPreferredSize().height + 5
             + this.exposureSpinner.getPreferredSize().height + 5
@@ -844,6 +874,8 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.rendererComboBox.setVisible(visible);
     this.turbidityLabel.setVisible(visible);
     this.turbiditySpinner.setVisible(visible);
+    this.ozoneLabel.setVisible(visible);
+    this.ozoneSpinner.setVisible(visible);
     this.skyTransparentCheckBox.setVisible(visible);
     this.skyThroughGlassTransparentCheckBox.setVisible(visible);
     this.exposureLabel.setVisible(visible);
@@ -864,13 +896,15 @@ public class PhotoPanel extends JPanel implements DialogView {
   }
 
   /**
-   * Enables the turbidity spinner unless a photo is being created or the sky is not
+   * Enables the turbidity and ozone spinners unless a photo is being created or the sky is not
    * used to light the scene (observer camera with a sky texture).
    */
   private void updateTurbidityEnabled() {
-    this.turbiditySpinner.setEnabled(this.photoCreationExecutor == null
+    boolean enabled = this.photoCreationExecutor == null
         && !(this.home.getCamera() instanceof ObserverCamera
-             && this.home.getEnvironment().getSkyTexture() != null));
+             && this.home.getEnvironment().getSkyTexture() != null);
+    this.turbiditySpinner.setEnabled(enabled);
+    this.ozoneSpinner.setEnabled(enabled);
   }
 
   /**
@@ -1014,6 +1048,7 @@ public class PhotoPanel extends JPanel implements DialogView {
     this.ceilingLightEnabledCheckBox.setEnabled(false);
     this.rendererComboBox.setEnabled(false);
     this.turbiditySpinner.setEnabled(false);
+    this.ozoneSpinner.setEnabled(false);
     this.skyTransparentCheckBox.setEnabled(false);
     this.skyThroughGlassTransparentCheckBox.setEnabled(false);
     this.exposureSpinner.setEnabled(false);

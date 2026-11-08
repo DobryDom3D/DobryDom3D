@@ -189,6 +189,7 @@ public class HomeXMLExporter extends ObjectXMLExporter<Home> {
           writer.writeColorAttribute("lightColor", environment.getLightColor());
           writer.writeFloatAttribute("wallsAlpha", environment.getWallsAlpha(), 0);
           writer.writeFloatAttribute("turbidity", environment.getTurbidity(), HomeEnvironment.DEFAULT_TURBIDITY);
+          writer.writeFloatAttribute("ozone", environment.getOzone(), HomeEnvironment.DEFAULT_OZONE);
           writer.writeBooleanAttribute("allLevelsVisible", environment.isAllLevelsVisible(), false);
           writer.writeBooleanAttribute("observerCameraElevationAdjusted", environment.isObserverCameraElevationAdjusted(), true);
           writer.writeColorAttribute("ceillingLightColor", environment.getCeillingLightColor());

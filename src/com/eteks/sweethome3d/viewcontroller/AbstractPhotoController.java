@@ -38,7 +38,7 @@ public abstract class AbstractPhotoController implements Controller {
   /**
    * The properties that may be edited by the view associated to this controller. 
    */
-  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, SKY_TRANSPARENT, SKY_THROUGH_GLASS_TRANSPARENT,
+  public enum Property {ASPECT_RATIO, WIDTH, HEIGHT, QUALITY, VIEW_3D_ASPECT_RATIO, CEILING_LIGHT_COLOR, TURBIDITY, OZONE, SKY_TRANSPARENT, SKY_THROUGH_GLASS_TRANSPARENT,
                         EXPOSURE, SUN_POWER, SKY_LIGHTING_INTERIOR}
   
   private final Home                  home;
@@ -53,6 +53,7 @@ public abstract class AbstractPhotoController implements Controller {
   private float                       view3DAspectRatio;
   private int                         ceilingLightColor;
   private float                       turbidity;
+  private float                       ozone;
   private boolean                     skyTransparent;
   private boolean                     skyThroughGlassTransparent;
   private float                       exposure;
@@ -76,6 +77,7 @@ public abstract class AbstractPhotoController implements Controller {
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_QUALITY, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.TURBIDITY, listener);
+    home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.OZONE, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, listener);
     home.getEnvironment().addPropertyChangeListener(HomeEnvironment.Property.PHOTO_EXPOSURE, listener);
@@ -105,6 +107,7 @@ public abstract class AbstractPhotoController implements Controller {
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_QUALITY, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.CEILING_LIGHT_COLOR, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.TURBIDITY, this);
+        ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.OZONE, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT, this);
         ((HomeEnvironment)ev.getSource()).removePropertyChangeListener(HomeEnvironment.Property.PHOTO_EXPOSURE, this);
@@ -122,6 +125,8 @@ public abstract class AbstractPhotoController implements Controller {
         controller.setCeilingLightColor((Integer)ev.getNewValue());
       } else if (HomeEnvironment.Property.TURBIDITY.name().equals(ev.getPropertyName())) {
         controller.setTurbidity((Float)ev.getNewValue());
+      } else if (HomeEnvironment.Property.OZONE.name().equals(ev.getPropertyName())) {
+        controller.setOzone((Float)ev.getNewValue());
       } else if (HomeEnvironment.Property.PHOTO_SKY_TRANSPARENT.name().equals(ev.getPropertyName())) {
         controller.setSkyTransparent((Boolean)ev.getNewValue());
       } else if (HomeEnvironment.Property.PHOTO_SKY_THROUGH_GLASS_TRANSPARENT.name().equals(ev.getPropertyName())) {
@@ -168,6 +173,7 @@ public abstract class AbstractPhotoController implements Controller {
     setQuality(homeEnvironment.getPhotoQuality());
     setCeilingLightColor(homeEnvironment.getCeillingLightColor());
     setTurbidity(homeEnvironment.getTurbidity());
+    setOzone(homeEnvironment.getOzone());
     setSkyTransparent(homeEnvironment.isPhotoSkyTransparent());
     setSkyThroughGlassTransparent(homeEnvironment.isPhotoSkyThroughGlassTransparent());
     setExposure(homeEnvironment.getPhotoExposure());
@@ -328,6 +334,26 @@ public abstract class AbstractPhotoController implements Controller {
    */
   public float getTurbidity() {
     return this.turbidity;
+  }
+
+  /**
+   * Sets the edited amount of ozone in the atmosphere.
+   */
+  public void setOzone(float ozone) {
+    ozone = Math.max(HomeEnvironment.MIN_OZONE, Math.min(HomeEnvironment.MAX_OZONE, ozone));
+    if (this.ozone != ozone) {
+      float oldOzone = this.ozone;
+      this.ozone = ozone;
+      this.propertyChangeSupport.firePropertyChange(Property.OZONE.name(), oldOzone, ozone);
+      this.home.getEnvironment().setOzone(ozone);
+    }
+  }
+
+  /**
+   * Returns the edited amount of ozone in the atmosphere.
+   */
+  public float getOzone() {
+    return this.ozone;
   }
 
   /**

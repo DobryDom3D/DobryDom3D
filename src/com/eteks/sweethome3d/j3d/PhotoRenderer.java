@@ -530,6 +530,7 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
     // Update Sun direction during daytime
     if (sunDirection [1] > -0.075f) {
       float turbidity = getHome().getEnvironment().getTurbidity();
+      float ozone = getHome().getEnvironment().getOzone();
       float sunPowerFactor = (float)Math.pow(2, getHome().getEnvironment().getPhotoSunPower());
       if (this.useSunSky) {
         this.sunflow.parameter("up", new Vector3(0, 1, 0));
@@ -553,6 +554,7 @@ public class PhotoRenderer extends AbstractPhotoRenderer {
       parameterList.addVectors("sundir", InterpolationType.NONE,
           new float [] {sunDirection [0], sunDirection [1], sunDirection [2]});
       parameterList.addFloat("turbidity", turbidity);
+      parameterList.addFloat("ozone", ozone);
       sunSkyLight.update(parameterList, this.sunflow);
       float [] sunColor = sunSkyLight.getSunColor().getRGB();
 
