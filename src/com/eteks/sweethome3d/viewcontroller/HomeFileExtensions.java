@@ -73,23 +73,13 @@ public final class HomeFileExtensions {
    * extension (<code>.sh3d</code> becomes <code>.dd3d</code>, <code>.sh3x</code> becomes
    * <code>.dd3x</code>). Other paths are returned unchanged.
    */
-  public static String toNative(String path) {
+  public static String toDobryDom3D(String path) {
     if (hasExtension(path, LEGACY_DEFAULT)) {
       return replaceExtension(path, LEGACY_DEFAULT, DEFAULT);
     } else if (hasExtension(path, LEGACY_COMPRESSED)) {
       return replaceExtension(path, LEGACY_COMPRESSED, COMPRESSED);
     }
     return path;
-  }
-
-  /**
-   * Returns <code>path</code> with its home extension, or its last extension if it isn't a
-   * home extension, replaced by <code>extension</code>. A path without extension gets it appended.
-   */
-  public static String withExtension(String path, String extension) {
-    int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-    int dot = path.lastIndexOf('.');
-    return (dot > separator ? path.substring(0, dot) : path) + extension;
   }
 
   private static boolean hasExtension(String path, String extension) {

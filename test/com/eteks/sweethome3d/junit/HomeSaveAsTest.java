@@ -165,11 +165,11 @@ public class HomeSaveAsTest extends TestCase {
     assertEquals("/homes/foo.dd3d", this.writtenNames.get(0));
   }
 
-  public void testSaveAsAndCompressSuggestsCompressedExtension() {
+  public void testSaveAsAndCompressKeepsTheHomeName() {
     Home home = new Home();
     home.setName("/homes/foo.dd3d");
     this.chosenName = null;
     createController(home).saveAsAndCompress();
-    assertEquals("/homes/foo.dd3x", this.dialogSuggestions.get(0));
+    assertEquals("/homes/foo.dd3d", this.dialogSuggestions.get(0));
   }
 }

@@ -2548,12 +2548,7 @@ public class HomeController implements Controller {
    * @since 4.4
    */
   protected void saveAs(HomeRecorder.Type recorderType, Runnable postSaveTask) {
-    String suggestedName = this.home.getName();
-    if (suggestedName != null
-        && recorderType == HomeRecorder.Type.COMPRESSED) {
-      suggestedName = HomeFileExtensions.withExtension(suggestedName, HomeFileExtensions.COMPRESSED);
-    }
-    String newName = getView().showSaveDialog(suggestedName);
+    String newName = getView().showSaveDialog(this.home.getName());
     if (newName != null) {
       save(newName, recorderType, postSaveTask);
     }
