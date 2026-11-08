@@ -212,8 +212,7 @@ javaAwtDesktop, jdepend-2.10 (rebuilt `--release 11`), **jdom-1.1.1**
   jpackage runs only; on Windows `install/jpackage/windows/main.wxs` (a copy of the
   JDK 26 template, compare it when upgrading the JDK) adds `OpenWithProgids`
   registry entries. CI checks both: `.github/scripts/check-macos-associations.py`
-  (gating) and `check-windows-associations.ps1` (installs the exe, non-gating
-  until proven). Neither can check how Finder or Explorer present the menus.
+  and `check-windows-associations.ps1` (installs the exe), both gating. Neither can check how Finder or Explorer present the menus.
 - Windows: exe (`--win-menu/dir-chooser/shortcut`, upgrade UUID), SHA-256 +
   timestamp signtool signing, post-image hook
   (`install/windows/DobryDom3D-post-image.wsf`) injecting signing env vars.
