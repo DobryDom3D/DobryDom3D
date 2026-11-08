@@ -54,3 +54,17 @@ Preferences dialog and is persisted across sessions.
 ```
 fix: restore divider ratio when changing split orientation
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (DobryDom3D/DobryDom3D) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: GLOSSARY.md and docs/adr/ at the repo root. See `docs/agents/domain.md`.
