@@ -100,7 +100,7 @@ public abstract class Object3DBranch extends BranchGroup {
   protected static final Integer  DEFAULT_AMBIENT_COLOR = 0x333333;
   protected static final Material DEFAULT_MATERIAL      = new Material();
 
-  private static final Map<Long, Material>                materials = new HashMap<Long, Material>();
+  private static final Map<MaterialKey, Material>                materials = new HashMap<MaterialKey, Material>();
   private static final Map<TextureKey, TextureAttributes> textureAttributes = new HashMap<TextureKey, TextureAttributes>();
   private static final Map<Object, Map<Texture, Texture>> contextTextures = new WeakHashMap<Object, Map<Texture, Texture>>();
 
@@ -201,8 +201,34 @@ public abstract class Object3DBranch extends BranchGroup {
    * Returns a shared material instance matching the given color.
    */
   protected Material getMaterial(Integer diffuseColor, Integer ambientColor, float shininess) {
+    return getMaterial(diffuseColor, ambientColor, shininess, null);
+  }
+
+  /**
+   * Returns a shared material instance matching the given color and reflection.
+   *
+   * Java 3D's Material class doesn't expose a dedicated reflection property.
+   * Reflection is therefore represented here by increasing the material's
+   * specular component. A value of 0 leaves the material's specular component
+   * unchanged, while a value of 1 gives the strongest specular contribution
+   * supported by the Java 3D material model.
+   *
+   * This is an approximation of reflection rather than true environment or
+   * mirror reflection.
+   */
+  protected Material getMaterial(Integer diffuseColor, Integer ambientColor,
+                                 float shininess, Float reflection) {
     if (diffuseColor != null) {
-      Long materialKey = new Long(diffuseColor + (ambientColor << 24) + ((char)(shininess * 128) << 48));
+      float clampedShininess = Math.max(0, Math.min (1, shininess));
+      float clampedReflection = reflection != null
+          ? Math.max (0, Math.min(1, reflection.floatValue()))
+          : 0;
+
+      MaterialKey materialKey = new MaterialKey(
+          diffuseColor,
+          ambientColor,
+          clampedShininess,
+          clampedReflection);
       Material material = materials.get(materialKey);
       if (material == null) {
         Color3f ambientMaterialColor = new Color3f(((ambientColor >>> 16) & 0xFF) / 255f,
@@ -211,15 +237,70 @@ public abstract class Object3DBranch extends BranchGroup {
         Color3f diffuseMaterialColor = new Color3f(((diffuseColor >>> 16) & 0xFF) / 255f,
                                                     ((diffuseColor >>> 8) & 0xFF) / 255f,
                                                             (diffuseColor & 0xFF) / 255f);
+
+        float specularIntensity = Math.max(clampedShininess, clampedReflection);
+
         material = new Material(ambientMaterialColor, new Color3f(), diffuseMaterialColor,
-            new Color3f(shininess, shininess, shininess), Math.max(1, shininess * 128));
+            new Color3f(specularIntensity, specularIntensity, specularIntensity), Math.max(1, clampedShininess * 128));
         material.setCapability(Material.ALLOW_COMPONENT_READ);
         // Store created materials in cache
         materials.put(materialKey, material);
       }
       return material;
     } else {
-      return getMaterial(DEFAULT_COLOR, DEFAULT_AMBIENT_COLOR, shininess);
+      return getMaterial(DEFAULT_COLOR, DEFAULT_AMBIENT_COLOR, shininess, reflection);
+    }
+  }
+
+  /**
+   * Key used to share material instances.
+   *
+   * Reflection is part of the key so a material with a different reflection
+   * value never reuses a cached material with another reflection value.
+   */
+  private static class MaterialKey {
+    private final Integer diffuseColor;
+    private final Integer ambientColor;
+    private final float   shininess;
+    private final float   reflection;
+
+    public MaterialKey(Integer diffuseColor, Integer ambientColor,
+                       float shininess, float reflection) {
+      this.diffuseColor = diffuseColor;
+      this.ambientColor = ambientColor;
+      this.shininess = shininess;
+      this.reflection = reflection;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      } else if (!(obj instanceof MaterialKey)) {
+        return false;
+      }
+
+      MaterialKey key = (MaterialKey)obj;
+      return (this.diffuseColor == key.diffuseColor
+              || (this.diffuseColor != null && this.diffuseColor.equals(key.diffuseColor)))
+          && (this.ambientColor == key.ambientColor
+              || (this.ambientColor != null && this.ambientColor.equals(key.ambientColor)))
+          && Float.floatToIntBits(this.shininess) == Float.floatToIntBits(key.shininess)
+          && Float.floatToIntBits(this.reflection) == Float.floatToIntBits(key.reflection);
+    }
+
+    @Override
+    public int hashCode() {
+      int hashCode = 0;
+      if (this.diffuseColor != null) {
+        hashCode += this.diffuseColor.hashCode();
+      }
+      if (this.ambientColor != null) {
+        hashCode += this.ambientColor.hashCode();
+      }
+      hashCode = 31 * hashCode + Float.floatToIntBits(this.shininess);
+      hashCode = 31 * hashCode + Float.floatToIntBits(this.reflection);
+      return hashCode;
     }
   }
 
