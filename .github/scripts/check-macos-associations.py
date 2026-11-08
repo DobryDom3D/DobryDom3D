@@ -19,7 +19,7 @@ EXPECTED_RANKS = {
 
 
 def extension_ranks(info):
-    """Returns the LSHandlerRank declared for each file extension."""
+    """Returns the set of LSHandlerRank values declared for each file extension."""
     extensions_by_type = {}
     for declaration in info.get("UTExportedTypeDeclarations", []):
         tags = declaration.get("UTTypeTagSpecification", {})
@@ -30,18 +30,18 @@ def extension_ranks(info):
         for content_type in document_type.get("LSItemContentTypes", []):
             extensions += extensions_by_type.get(content_type, [])
         for extension in extensions:
-            ranks[extension.lower()] = document_type.get("LSHandlerRank")
+            ranks.setdefault(extension.lower(), set()).add(document_type.get("LSHandlerRank"))
     return ranks
 
 
 def main(path):
     with open(path, "rb") as plist_file:
         ranks = extension_ranks(plistlib.load(plist_file))
-    print("Declared handler ranks:", dict(sorted(ranks.items())))
+    print("Declared handler ranks:", {k: sorted(v) for k, v in sorted(ranks.items())})
     errors = []
     for extension, expected in EXPECTED_RANKS.items():
-        if ranks.get(extension) != expected:
-            errors.append("." + extension + ": expected rank " + expected + ", found " + str(ranks.get(extension)))
+        if ranks.get(extension) != {expected}:
+            errors.append("." + extension + ": expected rank " + expected + ", found " + str(sorted(ranks.get(extension, []))))
     for error in errors:
         print("::error::" + error)
     return 1 if errors else 0

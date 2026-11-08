@@ -1,6 +1,7 @@
 # This file is part of DobryDom3D, a fork of Sweet Home 3D 7.5, modified by DobryDom3D contributors since August 2026.
 # Installs the DobryDom3D installer silently and checks its file association registry entries:
 # .dd3d and .dd3x must be owned by DobryDom3D, while .sh3d and .sh3x must only list it in OpenWithProgids.
+# The installer is expected to install per machine (the default), so the associations are read from HKLM.
 param([Parameter(Mandatory = $true)][string]$Installer)
 
 $ErrorActionPreference = 'Stop'

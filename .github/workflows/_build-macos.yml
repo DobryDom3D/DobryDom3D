@@ -73,8 +73,8 @@ jobs:
           dmg=(install/DobryDom3D-*-macosx-${{ matrix.arch }}.dmg)
           mount_point="$(mktemp -d)"
           # The DMG embeds the license agreement, which hdiutil asks to accept on stdin
+          trap 'hdiutil detach "$mount_point" -force 2>/dev/null || true' EXIT
           printf 'Y\n' | hdiutil attach "${dmg[0]}" -mountpoint "$mount_point" -nobrowse -readonly
-          trap 'hdiutil detach "$mount_point" -force' EXIT
           plist="$(find "$mount_point" -maxdepth 4 -path '*.app/Contents/Info.plist' | head -n 1)"
           if [ -z "$plist" ]; then
             echo "::error::No app Info.plist found in ${dmg[0]}"
