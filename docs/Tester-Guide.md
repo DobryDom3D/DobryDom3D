@@ -9,7 +9,7 @@ time you start them (see [Installing](#installing)). Thank you for helping.
 
 ### 1. Your `.sh3d` files are not overwritten, but keep a copy anyway
 
-DobryDom3D saves homes as `.dd3d` files (`.dd3x` for "Save and compress"). It
+DobryDom3D saves homes as `.dd3d` files. It
 can open `.dd3d`, `.dd3x`, `.sh3d` and `.sh3x` files, but it never writes to a
 `.sh3d` or `.sh3x` file: when you save a home you opened from one, DobryDom3D
 asks for a new name, suggesting the same name with `.dd3d`. Your original stays
@@ -44,8 +44,8 @@ The Windows and macOS installers register DobryDom3D for `.dd3d` and `.dd3x`
 files, and for the Sweet Home 3D library and plugin file types (`.sh3f`,
 `.sh3l`, `.sh3p`, `.sh3t`). For `.sh3d` and `.sh3x` files DobryDom3D is only
 listed as an alternative: it appears in "Open with" but does not become the
-default application, so those files keep opening in Sweet Home 3D when you
-double-click them. You can also use File > Open in DobryDom3D, or drag them onto
+default application, so double-clicking them keeps using whatever opens them
+today (Sweet Home 3D, if it is installed). You can also use File > Open in DobryDom3D, or drag them onto
 its window. You can change associations in your system's "Open with" settings.
 
 ## Downloading

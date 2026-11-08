@@ -48,19 +48,13 @@ public class HomeFileExtensionsTest extends TestCase {
     assertFalse(HomeFileExtensions.isHomeFile(null));
   }
 
-  public void testToNativeOnlyChangesLegacyPaths() {
-    assertEquals("/h/foo.dd3d", HomeFileExtensions.toNative("/h/foo.sh3d"));
-    assertEquals("/h/foo.dd3x", HomeFileExtensions.toNative("/h/foo.SH3X"));
-    assertEquals("/h/foo.dd3d", HomeFileExtensions.toNative("/h/foo.dd3d"));
-    assertEquals("/h/foo.txt", HomeFileExtensions.toNative("/h/foo.txt"));
+  public void testToDobryDom3DOnlyChangesLegacyPaths() {
+    assertEquals("/h/foo.dd3d", HomeFileExtensions.toDobryDom3D("/h/foo.sh3d"));
+    assertEquals("/h/foo.dd3x", HomeFileExtensions.toDobryDom3D("/h/foo.SH3X"));
+    assertEquals("/h/foo.dd3d", HomeFileExtensions.toDobryDom3D("/h/foo.dd3d"));
+    assertEquals("/h/foo.txt", HomeFileExtensions.toDobryDom3D("/h/foo.txt"));
     assertTrue(HomeFileExtensions.isLegacy("/h/foo.sh3d"));
     assertFalse(HomeFileExtensions.isLegacy("/h/foo.dd3d"));
-  }
-
-  public void testWithExtension() {
-    assertEquals("/h/foo.dd3x", HomeFileExtensions.withExtension("/h/foo.dd3d", ".dd3x"));
-    assertEquals("/h.d/foo.dd3x", HomeFileExtensions.withExtension("/h.d/foo", ".dd3x"));
-    assertEquals("foo.dd3d", HomeFileExtensions.withExtension("foo.sh3d", ".dd3d"));
   }
 
   public void testFileFilterAcceptsAllHomeExtensions() {

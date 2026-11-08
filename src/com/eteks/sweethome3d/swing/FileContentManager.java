@@ -594,7 +594,7 @@ public class FileContentManager implements ContentManager {
       if (contentType == ContentType.SWEET_HOME_3D
           && HomeFileExtensions.isHomeFile(path)) {
         // Keep .dd3d and .dd3x, and never suggest overwriting a legacy .sh3d or .sh3x file
-        path = HomeFileExtensions.toNative(path);
+        path = HomeFileExtensions.toDobryDom3D(path);
       } else {
         // If path has an extension, remove it and build a path that matches contentType
         int extensionIndex = path.lastIndexOf('.');
@@ -640,9 +640,9 @@ public class FileContentManager implements ContentManager {
       if (contentType == ContentType.SWEET_HOME_3D
           && HomeFileExtensions.isHomeFile(savedPath)) {
         // A home is never saved with a legacy extension, even if the user typed it
-        String nativePath = HomeFileExtensions.toNative(savedPath);
-        addedExtension = !nativePath.equals(savedPath);
-        savedPath = nativePath;
+        String dobryDom3DPath = HomeFileExtensions.toDobryDom3D(savedPath);
+        addedExtension = !dobryDom3DPath.equals(savedPath);
+        savedPath = dobryDom3DPath;
       } else if (defaultExtension != null) {
         if (!savedPath.toLowerCase().endsWith(defaultExtension)) {
           savedPath += defaultExtension;
