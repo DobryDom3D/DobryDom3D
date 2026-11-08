@@ -43,6 +43,14 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   public static final float DEFAULT_TURBIDITY = 6f;
 
   /**
+   * The minimum, maximum and default values of the amount of ozone in the atmosphere
+   * (in cm at normal temperature and pressure) used in photos, which tints the color of the sun.
+   */
+  public static final float MIN_OZONE = 0.1f;
+  public static final float MAX_OZONE = 0.6f;
+  public static final float DEFAULT_OZONE = 0.35f;
+
+  /**
    * The minimum and maximum values of the exposure and of the sun power used in photos,
    * both expressed in stops (each stop doubles the brightness, 0 keeping the default look).
    */
@@ -55,7 +63,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
    * The environment properties that may change.
    */
   public enum Property {OBSERVER_CAMERA_ELEVATION_ADJUSTED, GROUND_COLOR, GROUND_TEXTURE, BACKGROUND_IMAGE_VISIBLE_ON_GROUND_3D,
-                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, PHOTO_SKY_TRANSPARENT, PHOTO_SKY_THROUGH_GLASS_TRANSPARENT,
+                        SKY_COLOR, SKY_TEXTURE, LIGHT_COLOR, CEILING_LIGHT_COLOR, TURBIDITY, OZONE, PHOTO_SKY_TRANSPARENT, PHOTO_SKY_THROUGH_GLASS_TRANSPARENT,
                         PHOTO_EXPOSURE, PHOTO_SUN_POWER, PHOTO_SKY_LIGHTING_INTERIOR,
                         WALLS_ALPHA, DRAWING_MODE, SUBPART_SIZE_UNDER_LIGHT, ALL_LEVELS_VISIBLE,
                         PHOTO_WIDTH, PHOTO_HEIGHT, PHOTO_ASPECT_RATIO, PHOTO_QUALITY,
@@ -76,6 +84,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private int                             lightColor;
   private int                             ceilingLightColor;
   private float                           turbidity;
+  private float                           ozone;
   private boolean                         photoSkyTransparent;
   private boolean                         photoSkyThroughGlassTransparent;
   private float                           photoExposure;
@@ -161,6 +170,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
     this.lightColor = lightColor;
     this.ceilingLightColor = 0xD0D0D0;
     this.turbidity = DEFAULT_TURBIDITY;
+    this.ozone = DEFAULT_OZONE;
     this.wallsAlpha = wallsAlpha;
     this.drawingMode = DrawingMode.FILL;
     this.photoWidth = 400;
@@ -180,6 +190,7 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
   private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
     this.ceilingLightColor = 0xD0D0D0;
     this.turbidity = DEFAULT_TURBIDITY;
+    this.ozone = DEFAULT_OZONE;
     this.photoWidth = 400;
     this.photoHeight = 300;
     this.photoAspectRatio = AspectRatio.VIEW_3D_RATIO;
@@ -470,6 +481,26 @@ public class HomeEnvironment extends HomeObject implements Serializable, Cloneab
       this.photoSkyLightingInterior = photoSkyLightingInterior;
       firePropertyChange(Property.PHOTO_SKY_LIGHTING_INTERIOR.name(),
           !photoSkyLightingInterior, photoSkyLightingInterior);
+    }
+  }
+
+  /**
+   * Returns the amount of ozone in the atmosphere used in photos, in cm (NTP).
+   */
+  public float getOzone() {
+    return this.ozone;
+  }
+
+  /**
+   * Sets the amount of ozone in the atmosphere used in photos, clamped between {@link #MIN_OZONE}
+   * and {@link #MAX_OZONE}, and fires a <code>PropertyChangeEvent</code>.
+   */
+  public void setOzone(float ozone) {
+    ozone = Math.max(MIN_OZONE, Math.min(MAX_OZONE, ozone));
+    if (ozone != this.ozone) {
+      float oldOzone = this.ozone;
+      this.ozone = ozone;
+      firePropertyChange(Property.OZONE.name(), oldOzone, ozone);
     }
   }
 

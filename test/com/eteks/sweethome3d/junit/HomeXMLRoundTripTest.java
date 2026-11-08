@@ -183,6 +183,7 @@ public class HomeXMLRoundTripTest extends TestCase {
     assertEquals("Different sky color", environment.getSkyColor(), readEnvironment.getSkyColor());
     assertEquals("Different light color", environment.getLightColor(), readEnvironment.getLightColor());
     assertEquals("Different turbidity", environment.getTurbidity(), readEnvironment.getTurbidity(), 0);
+    assertEquals("Different ozone", environment.getOzone(), readEnvironment.getOzone(), 0);
     assertEquals("Different transparent sky", environment.isPhotoSkyTransparent(), readEnvironment.isPhotoSkyTransparent());
     assertEquals("Different transparent sky through glass",
         environment.isPhotoSkyThroughGlassTransparent(), readEnvironment.isPhotoSkyThroughGlassTransparent());
@@ -355,6 +356,7 @@ public class HomeXMLRoundTripTest extends TestCase {
     environment.setLightColor(0xFFFFFF);
     environment.setCeillingLightColor(0xEEEEEE);
     environment.setTurbidity(7.5f);
+    environment.setOzone(0.45f);
     environment.setPhotoSkyTransparent(true);
     environment.setPhotoSkyThroughGlassTransparent(true);
     environment.setPhotoExposure(-1.5f);

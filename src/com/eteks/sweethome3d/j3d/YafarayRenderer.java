@@ -595,6 +595,7 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
     float [] sunColor = null;
     if (sunDirection [1] > -0.075f) {
       float turbidity = getHome().getEnvironment().getTurbidity();
+      float ozone = getHome().getEnvironment().getOzone();
       // Retrieve sun color with SunFlow (YafaRay ComputeAttenuatedSunlight is not accessible)
       SunSkyLight sunSkyLight = new SunSkyLight();
       ParameterList parameterList = new ParameterList();
@@ -604,6 +605,7 @@ public class YafarayRenderer extends AbstractPhotoRenderer {
       parameterList.addVectors("sundir", InterpolationType.NONE,
           new float [] {sunDirection [0], sunDirection [1], sunDirection [2]});
       parameterList.addFloat("turbidity", turbidity);
+      parameterList.addFloat("ozone", ozone);
       sunSkyLight.update(parameterList, new SunflowAPI());
       sunColor = sunSkyLight.getSunColor().getRGB();
 
