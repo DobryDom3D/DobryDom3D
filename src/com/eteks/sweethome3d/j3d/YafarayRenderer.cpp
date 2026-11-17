@@ -32,6 +32,8 @@
 #include <core_api/camera.h>
 #include <core_api/integrator.h>
 #include <yafraycore/monitor.h>
+#include <cstdlib>
+#include <string>
 
 using namespace yafaray;
 
@@ -189,6 +191,13 @@ JNIEXPORT jlong JNICALL Java_com_eteks_sweethome3d_j3d_YafarayRenderer_createEnv
       integratorProgressBar = new SilentProgressBar_t();
     }
     
+    // Optional diagnostics: DD3D_YAFARAY_LOG=<file> saves a detailed YafaRay log
+    // of each render to that file, once the render is finished
+    if (getenv("DD3D_YAFARAY_LOG") != NULL && getenv("DD3D_YAFARAY_LOG")[0] != '\0') {
+      yafLog.setLogMasterVerbosity("debug");
+      yafLog.setSaveLog(true);
+    }
+
     env = new renderEnvironment_t();
     pluginsPathStr = jniEnv->GetStringUTFChars(pluginsPath, 0);
     env->loadPlugins(pluginsPathStr);
@@ -733,6 +742,15 @@ JNIEXPORT void JNICALL Java_com_eteks_sweethome3d_j3d_YafarayRenderer_render(JNI
   imageColor_t *imageColorCallback = NULL;
   try {
     paraMap_t renderParamaters = getParams(jniEnv, params);
+    // Optional diagnostics: DD3D_YAFARAY_THREADS=<n> forces the number of threads
+    // (default is automatic detection)
+    const char *threadsStr = getenv("DD3D_YAFARAY_THREADS");
+    if (threadsStr != NULL && threadsStr[0] != '\0') {
+      int threads = atoi(threadsStr);
+      if (threads >= 1) {
+        renderParamaters["threads"] = threads;
+      }
+    }
     
     scene_t *scene = getScene(jniEnv, javaRenderer);
     renderEnvironment_t *env = getEnvironment(jniEnv, javaRenderer);
@@ -750,6 +768,12 @@ JNIEXPORT void JNICALL Java_com_eteks_sweethome3d_j3d_YafarayRenderer_render(JNI
     SilentProgressBar_t *progressBar = new SilentProgressBar_t();
     scene->getImageFilm()->setProgressBar(progressBar);
     scene->render();
+    
+    const char *logPath = getenv("DD3D_YAFARAY_LOG");
+    if (logPath != NULL && logPath[0] != '\0') {
+      yafLog.saveTxtLog(std::string(logPath));
+      yafLog.clearMemoryLog();
+    }
     
     delete imageColorCallback;    
     delete scene->getImageFilm();
